@@ -37,11 +37,17 @@ function getCached(key) {
     priceCache.delete(key);
     return undefined;
   }
+  // LRU: move to end (most recently used)
+  priceCache.delete(key);
+  priceCache.set(key, entry);
   return entry.value;
 }
 
 function setCache(key, value) {
+  // LRU: if key exists, delete first so it moves to end
+  if (priceCache.has(key)) priceCache.delete(key);
   if (priceCache.size >= CACHE_MAX_SIZE) {
+    // Evict least recently used (first entry in Map)
     const oldest = priceCache.keys().next().value;
     priceCache.delete(oldest);
   }
@@ -74,37 +80,74 @@ async function handlePriceFetch(url, cacheKey) {
 }
 
 async function doFetch(url, cacheKey) {
-  const response = await fetch(url, {
-    headers: { 'Accept': 'text/html', 'Accept-Language': 'en-US,en;q=0.9' },
-    signal: AbortSignal.timeout(10000),
-  });
+  const MAX_RETRIES = 1;
+  const RETRY_DELAY = 2000;
 
-  if (!response.ok) {
-    return { price: null, error: `HTTP ${response.status}` };
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch(url, {
+        headers: { 'Accept': 'text/html', 'Accept-Language': 'en-US,en;q=0.9' },
+        signal: AbortSignal.timeout(10000),
+      });
+
+      // Retry on transient server errors
+      if ((response.status === 429 || response.status >= 500) && attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, RETRY_DELAY));
+        continue;
+      }
+
+      if (!response.ok) {
+        return { price: null, error: `HTTP ${response.status}` };
+      }
+
+      const html = await response.text();
+      const priceData = extractPrices(html);
+      const result = {
+        flightPrices: priceData?.flightPrices || {},
+        price: priceData?.lowest || null,
+        error: null,
+      };
+
+      if (cacheKey && priceData) {
+        setCache(cacheKey, result);
+      }
+
+      return result;
+    } catch (e) {
+      if (attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, RETRY_DELAY));
+        continue;
+      }
+      return { price: null, error: e.message };
+    }
   }
-
-  const html = await response.text();
-  const priceData = extractPrices(html);
-  const result = {
-    flightPrices: priceData?.flightPrices || {},
-    price: priceData?.lowest || null,
-    error: null,
-  };
-
-  if (cacheKey && priceData) {
-    setCache(cacheKey, result);
-  }
-
-  return result;
 }
 
 function extractPrices(html) {
-  // Google Flights embeds price data in <script class="ds:1">.
-  // Each flight has ["AIRLINE","FLIGHTNUM",null,"Name"] followed by [[null,PRICE],"Cj...]
-  const dsMatch = html.match(/<script[^>]*class=["']ds:1["'][^>]*>([\s\S]*?)<\/script>/);
-  if (!dsMatch) return null;
+  // Google Flights embeds price data in <script> tags with class "ds:N".
+  // Primary: class="ds:1". Fallback: any script tag containing the price pattern.
+  let content = null;
 
-  const content = dsMatch[1];
+  // Strategy 1: exact class match
+  const dsMatch = html.match(/<script[^>]*class=["']ds:1["'][^>]*>([\s\S]*?)<\/script>/);
+  if (dsMatch) {
+    content = dsMatch[1];
+  }
+
+  // Strategy 2: any ds:N script tag containing price patterns
+  if (!content || !content.includes('"Cj')) {
+    const dsAny = html.match(/<script[^>]*class=["']ds:\d+["'][^>]*>([\s\S]*?)<\/script>/g);
+    if (dsAny) {
+      for (const tag of dsAny) {
+        if (tag.includes('"Cj')) {
+          const inner = tag.match(/<script[^>]*>([\s\S]*?)<\/script>/);
+          if (inner) { content = inner[1]; break; }
+        }
+      }
+    }
+  }
+
+  if (!content) return null;
 
   // Extract per-flight prices: flight number → price
   const flightPrices = {};

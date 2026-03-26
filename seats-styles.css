@@ -24,6 +24,21 @@
   background-color: #c0d7f9;
 }
 
+.gf-link.gf-no-price {
+  background-color: #f1f3f4;
+  color: #9aa0a6;
+  font-size: 12px;
+}
+
+.gf-link.gf-no-price:hover {
+  background-color: #e8eaed;
+}
+
+.gf-link.gf-price-only {
+  color: #5f6368;
+  font-style: italic;
+}
+
 .gf-link.gf-cpp-good {
   background-color: #e6f4ea;
   color: #137333;

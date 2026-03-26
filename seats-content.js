@@ -4,33 +4,58 @@
 (() => {
   'use strict';
 
-  const PROCESSED_ATTR = 'data-gf-processed';
   const LINK_CLASS = 'gf-link';
 
   let minCpp = 0;
+  let contextValid = true;
+
+  function isContextValid() {
+    try { return !!chrome.runtime?.id; } catch (e) { return false; }
+  }
 
   // Load min CPP setting
-  chrome.storage.sync.get({ minCpp: 0 }, (s) => { minCpp = s.minCpp || 0; });
-  chrome.storage.onChanged.addListener((changes) => {
-    if (changes.minCpp) {
-      minCpp = changes.minCpp.newValue || 0;
-      applyMinCppFilter();
-    }
-  });
+  try {
+    chrome.storage.sync.get({ minCpp: 0 }, (s) => { minCpp = s.minCpp || 0; });
+    chrome.storage.onChanged.addListener((changes) => {
+      if (!isContextValid()) { contextValid = false; return; }
+      if (changes.minCpp) {
+        minCpp = changes.minCpp.newValue || 0;
+        applyMinCppFilter();
+      }
+    });
+  } catch (e) { contextValid = false; }
 
   // Cabin name → protobuf seat enum
   const SEAT_MAP = { 'economy': 1, 'premium': 2, 'business': 3, 'first': 4 };
 
+  function isDirectOnly() {
+    try {
+      return new URL(location.href).searchParams.get('direct_only') === 'true';
+    } catch (e) { return false; }
+  }
+
   function buildGoogleFlightsUrl(origin, destination, date, cabin, airlineCode) {
     const seat = SEAT_MAP[cabin] || 1;
     const airlines = airlineCode ? [airlineCode] : [];
+    const nonstop = isDirectOnly();
     // buildGoogleFlightsTfsUrl is defined in protobuf.js (loaded before this script)
-    return buildGoogleFlightsTfsUrl(origin, destination, date, seat, airlines);
+    return buildGoogleFlightsTfsUrl(origin, destination, date, seat, airlines, nonstop);
+  }
+
+  function parseDepartureDate(departsText, fallbackDate) {
+    // Parse "11/06 10:55PM" or "03/28 6:43PM" → "YYYY-MM-DD"
+    if (!departsText) return fallbackDate;
+    const match = departsText.match(/(\d{1,2})\/(\d{1,2})/);
+    if (!match) return fallbackDate;
+    const month = match[1].padStart(2, '0');
+    const day = match[2].padStart(2, '0');
+    const year = fallbackDate ? fallbackDate.substring(0, 4) : new Date().getFullYear().toString();
+    return `${year}-${month}-${day}`;
   }
 
   function parseFlightInfo(flightsText) {
     if (!flightsText) return { airlineCode: null, flightNumber: null };
-    const match = flightsText.match(/([A-Z]{2})(\d+)/);
+    const match = flightsText.match(/([A-Z\d]{2})(\d+)/);
     if (!match) return { airlineCode: null, flightNumber: null };
     return { airlineCode: match[1], flightNumber: match[1] + match[2] };
   }
@@ -101,28 +126,49 @@
 
   // ─── Price Fetching ──────────────────────────────────────────
 
-  function fetchPrice({ url, cacheKey, link, pointsCost, flightNumber }) {
-    chrome.runtime.sendMessage(
-      { action: 'fetchGoogleFlightsPrice', url, cacheKey },
-      (response) => {
-        if (chrome.runtime.lastError || !response) return;
-        // Use per-flight price if available, otherwise fall back to lowest
-        const price = (flightNumber && response.flightPrices?.[flightNumber]) || response.price;
-        if (price !== null && price !== undefined) {
-          const cppVal = pointsCost > 0 ? (price * 100 / pointsCost) : 0;
-          const cppStr = cppVal.toFixed(2);
-          link.textContent = `$${price.toLocaleString()} · ${cppStr}cpp`;
-          link.title = `Cash price: $${price.toLocaleString()} | ${cppStr} cents per point`;
-          link.dataset.cpp = cppStr;
-          if (cppVal >= 2.0) {
-            link.classList.add('gf-cpp-good');
+  function fetchPrice({ url, cacheKey, link, pointsCost, flightNumber, viewType }) {
+    try {
+      chrome.runtime.sendMessage(
+        { action: 'fetchGoogleFlightsPrice', url, cacheKey },
+        (response) => {
+          if (chrome.runtime.lastError || !response || response.error) {
+            link.textContent = '✈';
+            link.classList.add('gf-no-price');
+            link.title = 'Price unavailable — click to view on Google Flights';
+            return;
           }
-          if (minCpp > 0 && cppVal < minCpp) {
-            link.style.display = 'none';
+          // Use per-flight price if available, otherwise fall back to lowest
+          const price = (flightNumber && response.flightPrices?.[flightNumber]) || response.price;
+          if (price === null || price === undefined) {
+            link.textContent = '✈';
+            link.classList.add('gf-no-price');
+            link.title = 'Price unavailable — click to view on Google Flights';
+            return;
+          }
+
+          if (viewType === 'summary') {
+            // Program Summary: points may not correspond to the same flight as the
+            // cash price, so show only the price as a reference — no CPP.
+            link.textContent = `from $${price.toLocaleString()}`;
+            link.title = `Lowest cash price on this route/date: $${price.toLocaleString()}`;
+            link.classList.add('gf-price-only');
+          } else {
+            // Individual Flights: exact flight match, show price + CPP
+            const cppVal = pointsCost > 0 ? (price * 100 / pointsCost) : 0;
+            const cppStr = cppVal.toFixed(2);
+            link.textContent = `$${price.toLocaleString()} · ${cppStr}cpp`;
+            link.title = `Cash price: $${price.toLocaleString()} | ${cppStr} cents per point`;
+            link.dataset.cpp = cppStr;
+            if (cppVal >= 2.0) {
+              link.classList.add('gf-cpp-good');
+            }
+            if (minCpp > 0 && cppVal < minCpp) {
+              link.style.display = 'none';
+            }
           }
         }
-      }
-    );
+      );
+    } catch (e) { /* Extension context invalidated — ignore */ }
   }
 
   function applyMinCppFilter() {
@@ -156,26 +202,28 @@
   // ─── Injection ────────────────────────────────────────────────
 
   function processTable() {
+    if (!contextValid && !isContextValid()) return;
     const table = findResultsTable();
     if (!table) return;
 
     const viewType = detectViewType(table);
     const cols = getColumnIndices(table);
-    const rows = table.querySelectorAll('tbody tr:not([' + PROCESSED_ATTR + '])');
+    const rows = table.querySelectorAll('tbody tr');
     if (rows.length === 0) return;
 
     const urlParams = getOriginDestFromUrl();
     const urlDate = new URL(location.href).searchParams.get('date') || '';
 
     for (const row of rows) {
-      row.setAttribute(PROCESSED_ATTR, 'true');
 
       let origin, destination, date, airlineCode, flightNumber;
 
       if (viewType === 'individual') {
         origin = extractCellText(row, cols.origin) || urlParams.origin;
         destination = extractCellText(row, cols.destination) || urlParams.destination;
-        date = urlDate;
+        // Extract actual departure date from Departs column (e.g., "11/06 10:55PM")
+        const departsText = extractCellText(row, cols.departs);
+        date = parseDepartureDate(departsText, urlDate);
         const flightsText = extractCellText(row, cols.flights);
         ({ airlineCode, flightNumber } = parseFlightInfo(flightsText));
       } else {
@@ -212,7 +260,7 @@
         // Fetch price in background and update tooltip
         const pointsCost = parsePointsCost(cellText);
         const cacheKey = `${origin}-${destination}-${date}-${cabin}-${airlineCode || 'any'}`;
-        fetchPrice({ url, cacheKey, link, pointsCost, flightNumber });
+        fetchPrice({ url, cacheKey, link, pointsCost, flightNumber, viewType });
       }
     }
   }
@@ -221,7 +269,6 @@
 
   function removeAllLinks() {
     document.querySelectorAll('.' + LINK_CLASS).forEach(el => el.remove());
-    document.querySelectorAll(`[${PROCESSED_ATTR}]`).forEach(el => el.removeAttribute(PROCESSED_ATTR));
   }
 
   // ─── Observer ─────────────────────────────────────────────────
@@ -270,6 +317,12 @@
     // Initial injection (with delay for SPA rendering)
     setTimeout(() => processTable(), 1000);
     setupObserver();
+
+    // Periodic re-check for filter/sort/pagination changes
+    const intervalId = setInterval(() => {
+      if (!isContextValid()) { contextValid = false; clearInterval(intervalId); return; }
+      processTable();
+    }, 2000);
   }
 
   if (document.readyState === 'loading') {

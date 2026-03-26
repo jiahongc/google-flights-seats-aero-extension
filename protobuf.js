@@ -27,6 +27,11 @@ function encodeVarintField(fieldNumber, value) {
   return [...encodeTag(fieldNumber, 0), ...encodeVarint(value)];
 }
 
+// Like encodeVarintField but emits even when value is 0 (needed for max_stops=0 meaning nonstop)
+function encodeVarintFieldExplicit(fieldNumber, value) {
+  return [...encodeTag(fieldNumber, 0), ...encodeVarint(value)];
+}
+
 function encodeNestedMessage(fieldNumber, messageBytes) {
   return [...encodeTag(fieldNumber, 2), ...encodeVarint(messageBytes.length), ...messageBytes];
 }
@@ -39,16 +44,18 @@ function encodeNestedMessage(fieldNumber, messageBytes) {
  * @param {string} date - "YYYY-MM-DD"
  * @param {number} seat - 1=economy, 2=premium_economy, 3=business, 4=first
  * @param {string[]} [airlines] - IATA airline codes (e.g., ["AA"])
+ * @param {boolean} [nonstop] - If true, filter to nonstop flights only
  * @returns {string} Google Flights search URL
  */
-function buildGoogleFlightsTfsUrl(origin, destination, date, seat, airlines) {
+function buildGoogleFlightsTfsUrl(origin, destination, date, seat, airlines, nonstop) {
   // Airport messages: { string airport = 2; }
   const fromAirport = encodeString(2, origin);
   const toAirport = encodeString(2, destination);
 
-  // FlightData: { date=2, airlines=6, from=13, to=14 }
+  // FlightData: { date=2, max_stops=5, airlines=6, from=13, to=14 }
   const flightData = [
     ...encodeString(2, date),
+    ...(nonstop ? encodeVarintFieldExplicit(5, 0) : []),  // max_stops=0 → nonstop only
     ...(airlines || []).flatMap(a => encodeString(6, a)),
     ...encodeNestedMessage(13, fromAirport),
     ...encodeNestedMessage(14, toAirport),

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Seats.aero for Google Flights",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Search award flight availability on seats.aero directly from Google Flights",
   "permissions": ["activeTab", "storage"],
   "host_permissions": [
@@ -22,7 +22,7 @@
   "content_scripts": [
     {
       "matches": ["*://www.google.com/travel/flights/*"],
-      "js": ["airlines.js", "content.js"],
+      "js": ["airlines.js", "metros.js", "content.js"],
       "css": ["styles.css"],
       "run_at": "document_idle"
     },

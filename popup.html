@@ -45,6 +45,15 @@
       padding: 8px 0;
     }
 
+    .section-label {
+      padding: 10px 20px 2px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #1a73e8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
     .setting-row {
       display: flex;
       align-items: center;
@@ -184,6 +193,8 @@
   </div>
 
   <div class="settings">
+    <div class="section-label">Google Flights</div>
+
     <div class="setting-row">
       <label class="setting-label" for="globalButton">Global search button</label>
       <label class="toggle">
@@ -192,24 +203,7 @@
       </label>
     </div>
 
-    <div class="setting-row">
-      <label class="setting-label" for="perFlightButtons">Per-flight buttons</label>
-      <label class="toggle">
-        <input type="checkbox" id="perFlightButtons">
-        <span class="toggle-track"></span>
-      </label>
-    </div>
-
-    <div class="setting-row">
-      <label class="setting-label" for="flexibleDaysNum">Flexible dates</label>
-      <select id="flexibleDaysNum" class="setting-select">
-        <option value="0">Off</option>
-        <option value="3">±3 days</option>
-        <option value="5">±5 days</option>
-        <option value="7">±7 days</option>
-        <option value="14">±14 days</option>
-      </select>
-    </div>
+    <div class="section-label">seats.aero</div>
 
     <div class="setting-row">
       <label class="setting-label" for="minCpp">Min CPP to show</label>
@@ -218,7 +212,7 @@
   </div>
 
   <div class="footer">
-    <p class="footer-text">Click buttons on Google Flights to search award availability</p>
+    <p class="footer-text">Bridges Google Flights and seats.aero for award travel</p>
   </div>
 
   <script src="popup.js"></script>

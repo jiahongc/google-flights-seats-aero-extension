@@ -1,28 +1,29 @@
 # Seats.aero for Google Flights
 
-A Chrome extension that bridges Google Flights and [seats.aero](https://seats.aero) for award travel. Search award availability from Google Flights, and see Google Flights cash prices with cents-per-point (CPP) calculations on seats.aero.
+A Chrome extension that bridges [Google Flights](https://www.google.com/travel/flights) and [seats.aero](https://seats.aero) for award travel.
 
-| Global search button | Per-flight buttons | Popup settings |
+Search award availability from Google Flights with one click, and see Google Flights cash prices with cents-per-point (CPP) calculations on seats.aero results.
+
+## Screenshots
+
+| Google Flights | seats.aero | Settings |
 |---|---|---|
-| ![Global button](screenshots/global-button.png) | ![Per-flight buttons](screenshots/per-flight-buttons.png) | ![Popup settings](screenshots/popup-settings.png) |
+| ![Global button](screenshots/global-button.png) | ![seats.aero prices](screenshots/seats-aero-prices.png) | ![Popup settings](screenshots/popup-settings.png) |
 
 ## Features
 
 ### Google Flights → seats.aero
-- **Global search button** — appears in the Google Flights filter bar, searches your entire route on seats.aero
-- **Per-flight "Points" buttons** — appear on each flight result row, search that specific airport pair + airline
-- **Smart filter mapping** — automatically transfers origin, destination, date, cabin class, passenger count, nonstop filter, and airline
-- **Reverse search button** — one-way searches get a "↩ Return" button to quickly check the reverse direction
-- **Configurable flexible dates** — search ±3, ±5, ±7, or ±14 days around your date
+- **Search button** — appears in the Google Flights filter bar next to "All filters", opens seats.aero with your route pre-filled
+- **Smart filter mapping** — automatically transfers origin, destination, date, cabin class, passenger count, nonstop filter, and airline selection
+- **Round-trip support** — opens two tabs (outbound + return) for round-trip searches
 
 ### seats.aero → Google Flights
 - **Google Flights links** — clickable links on every award result that open Google Flights with the correct route, date, cabin, and airline
-- **Cash price display** — fetches the actual Google Flights cash price for each flight and shows it inline
-- **CPP calculation** — calculates cents-per-point (cash price / points cost) displayed to 2 decimal places
-- **Per-flight pricing** — matches the exact flight number (e.g., AA2848) to its specific cash price, not just the cheapest on the route
+- **Cash price + CPP** — fetches the actual Google Flights cash price and calculates cents-per-point inline (e.g., "$352 · 1.41cpp")
+- **Per-flight pricing** — matches the exact flight number to its specific cash price, not just the cheapest on the route
 - **CPP color coding** — green highlight when CPP >= 2.0 (great redemption value)
-- **Min CPP filter** — set a minimum CPP threshold in the popup to only show good deals
-- **Works on both views** — supports Individual Flights and Program Summary tables
+- **Min CPP filter** — set a minimum CPP threshold in the popup to hide low-value redemptions
+- **Both views supported** — works on Individual Flights and Program Summary tables
 
 ## Filter Mapping
 
@@ -33,8 +34,8 @@ A Chrome extension that bridges Google Flights and [seats.aero](https://seats.ae
 | Date | `date` | YYYY-MM-DD format |
 | Cabin class | `applicable_cabin` | economy / premium / business / first |
 | Passengers | `min_seats` | Total passenger count |
-| Nonstop filter | `direct_only` | Per-flight: auto-detected. Global: from filter bar |
-| Airline | `op_carriers` | Per-flight: from the flight row. Global: from filter bar |
+| Nonstop filter | `direct_only` | From Stops filter |
+| Airline | `op_carriers` | From Airlines filter |
 
 Filters without a seats.aero equivalent (bags, price, times, emissions, duration, connecting airports) are skipped.
 
@@ -50,20 +51,19 @@ Filters without a seats.aero equivalent (bags, price, times, emissions, duration
 
 ### On Google Flights
 1. Search for flights on [Google Flights](https://www.google.com/travel/flights)
-2. Click **"Search on seats.aero"** in the filter bar to search the whole route
-3. Or click **"Points"** on any flight row to search that specific flight
-4. seats.aero opens in a new tab with filters pre-filled
+2. Click **"Search on seats.aero"** in the filter bar
+3. seats.aero opens in a new tab with your search filters pre-filled
 
 ### On seats.aero
 1. Search for award availability on [seats.aero](https://seats.aero)
-2. Each result shows a Google Flights link with the cash price and CPP
-3. Click the link to open Google Flights filtered to that airline
-4. Set a minimum CPP in the popup to filter out low-value redemptions
+2. Each result shows a Google Flights link with the cash price and CPP value
+3. Green links indicate CPP >= 2.0 — a good redemption value
+4. Set a minimum CPP in the extension popup to filter out low-value results
 
 ## Requirements
 
 - Google Chrome (Manifest V3)
-- [seats.aero](https://seats.aero) account (Pro recommended for full filter access)
+- [seats.aero](https://seats.aero) account (Pro recommended for full access)
 
 ## Project Structure
 
@@ -72,8 +72,9 @@ Filters without a seats.aero equivalent (bags, price, times, emissions, duration
 ├── content.js         # Google Flights content script: button injection, filter extraction
 ├── seats-content.js   # seats.aero content script: link injection, CPP calculation
 ├── protobuf.js        # Protobuf encoder for Google Flights deep-link URLs
-├── background.js      # Service worker: tab creation + Google Flights price fetching
+├── background.js      # Service worker: tab creation + price fetching with LRU cache
 ├── airlines.js        # Airline name → IATA code lookup (~100 airlines)
+├── metros.js          # City/metro name → IATA airport code lookup
 ├── styles.css         # Button styling for Google Flights
 ├── seats-styles.css   # Link styling for seats.aero
 ├── popup.html         # Extension popup UI
