@@ -5,7 +5,8 @@
   "description": "Search award flight availability on seats.aero directly from Google Flights",
   "permissions": ["activeTab", "storage"],
   "host_permissions": [
-    "*://www.google.com/travel/flights/*"
+    "*://www.google.com/travel/flights/*",
+    "*://seats.aero/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -23,6 +24,12 @@
       "matches": ["*://www.google.com/travel/flights/*"],
       "js": ["airlines.js", "content.js"],
       "css": ["styles.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://seats.aero/*"],
+      "js": ["protobuf.js", "seats-content.js"],
+      "css": ["seats-styles.css"],
       "run_at": "document_idle"
     }
   ],

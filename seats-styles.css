@@ -1,0 +1,34 @@
+/* Google Flights link — injected into seats.aero result cells */
+
+.gf-link {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background-color: #e8f0fe;
+  color: #1a73e8;
+  font-size: 11px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  vertical-align: middle;
+  transition: background-color 0.15s;
+}
+
+.gf-link:hover {
+  background-color: #d2e3fc;
+  text-decoration: none;
+}
+
+.gf-link:active {
+  background-color: #c0d7f9;
+}
+
+.gf-link.gf-cpp-good {
+  background-color: #e6f4ea;
+  color: #137333;
+}
+
+.gf-link.gf-cpp-good:hover {
+  background-color: #ceead6;
+}
