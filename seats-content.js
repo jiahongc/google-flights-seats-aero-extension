@@ -28,11 +28,11 @@
     return buildGoogleFlightsTfsUrl(origin, destination, date, seat, airlines);
   }
 
-  function extractAirlineCode(flightsText) {
-    // Extract airline code from flight numbers like "AA1624" or "AA1624, AA3162"
-    if (!flightsText) return null;
-    const match = flightsText.match(/([A-Z]{2})\d/);
-    return match ? match[1] : null;
+  function parseFlightInfo(flightsText) {
+    if (!flightsText) return { airlineCode: null, flightNumber: null };
+    const match = flightsText.match(/([A-Z]{2})(\d+)/);
+    if (!match) return { airlineCode: null, flightNumber: null };
+    return { airlineCode: match[1], flightNumber: match[1] + match[2] };
   }
 
   // ─── DOM Parsing ──────────────────────────────────────────────
@@ -101,21 +101,22 @@
 
   // ─── Price Fetching ──────────────────────────────────────────
 
-  function fetchPrice(url, cacheKey, link, pointsCost) {
+  function fetchPrice({ url, cacheKey, link, pointsCost, flightNumber }) {
     chrome.runtime.sendMessage(
       { action: 'fetchGoogleFlightsPrice', url, cacheKey },
       (response) => {
         if (chrome.runtime.lastError || !response) return;
-        if (response.price !== null) {
-          const cppVal = pointsCost > 0 ? (response.price * 100 / pointsCost) : 0;
+        // Use per-flight price if available, otherwise fall back to lowest
+        const price = (flightNumber && response.flightPrices?.[flightNumber]) || response.price;
+        if (price !== null && price !== undefined) {
+          const cppVal = pointsCost > 0 ? (price * 100 / pointsCost) : 0;
           const cppStr = cppVal.toFixed(2);
-          link.textContent = `$${response.price.toLocaleString()} · ${cppStr}cpp`;
-          link.title = `Cash price: $${response.price.toLocaleString()} | ${cppStr} cents per point`;
+          link.textContent = `$${price.toLocaleString()} · ${cppStr}cpp`;
+          link.title = `Cash price: $${price.toLocaleString()} | ${cppStr} cents per point`;
           link.dataset.cpp = cppStr;
           if (cppVal >= 2.0) {
             link.classList.add('gf-cpp-good');
           }
-          // Hide if below min CPP threshold
           if (minCpp > 0 && cppVal < minCpp) {
             link.style.display = 'none';
           }
@@ -164,19 +165,19 @@
     if (rows.length === 0) return;
 
     const urlParams = getOriginDestFromUrl();
+    const urlDate = new URL(location.href).searchParams.get('date') || '';
 
     for (const row of rows) {
       row.setAttribute(PROCESSED_ATTR, 'true');
 
-      let origin, destination, date, airlineCode;
+      let origin, destination, date, airlineCode, flightNumber;
 
       if (viewType === 'individual') {
         origin = extractCellText(row, cols.origin) || urlParams.origin;
         destination = extractCellText(row, cols.destination) || urlParams.destination;
-        date = new URL(location.href).searchParams.get('date') || '';
-        // Extract airline from flight numbers column (e.g., "AA1624")
+        date = urlDate;
         const flightsText = extractCellText(row, cols.flights);
-        airlineCode = extractAirlineCode(flightsText);
+        ({ airlineCode, flightNumber } = parseFlightInfo(flightsText));
       } else {
         // Program Summary: has Date column, origin/dest from Departs/Arrives or URL
         date = extractCellText(row, cols.date) || '';
@@ -211,7 +212,7 @@
         // Fetch price in background and update tooltip
         const pointsCost = parsePointsCost(cellText);
         const cacheKey = `${origin}-${destination}-${date}-${cabin}-${airlineCode || 'any'}`;
-        fetchPrice(url, cacheKey, link, pointsCost);
+        fetchPrice({ url, cacheKey, link, pointsCost, flightNumber });
       }
     }
   }

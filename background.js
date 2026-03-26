@@ -84,31 +84,49 @@ async function doFetch(url, cacheKey) {
   }
 
   const html = await response.text();
-  const price = extractLowestPrice(html);
-  const result = { price, error: null };
+  const priceData = extractPrices(html);
+  const result = {
+    flightPrices: priceData?.flightPrices || {},
+    price: priceData?.lowest || null,
+    error: null,
+  };
 
-  if (cacheKey && price !== null) {
+  if (cacheKey && priceData) {
     setCache(cacheKey, result);
   }
 
   return result;
 }
 
-function extractLowestPrice(html) {
+function extractPrices(html) {
   // Google Flights embeds price data in <script class="ds:1">.
-  // Flight prices follow the pattern: [null,PRICE],"Cj  (price + base64 flight token)
+  // Each flight has ["AIRLINE","FLIGHTNUM",null,"Name"] followed by [[null,PRICE],"Cj...]
   const dsMatch = html.match(/<script[^>]*class=["']ds:1["'][^>]*>([\s\S]*?)<\/script>/);
   if (!dsMatch) return null;
 
   const content = dsMatch[1];
-  const prices = [];
-  const regex = /\[null,(\d+)\],"Cj/g;
-  let match;
-  while ((match = regex.exec(content)) !== null) {
-    const p = parseInt(match[1]);
-    if (p > 0 && p < 50000) prices.push(p);
+
+  // Extract per-flight prices: flight number → price
+  const flightPrices = {};
+  const flightRe = /\["([A-Z\d]{2})","(\d+)",null,"[^"]+"\]/g;
+  let m;
+  while ((m = flightRe.exec(content)) !== null) {
+    const flightCode = m[1] + m[2];
+    const afterFlight = content.substring(m.index, m.index + 800);
+    const priceMatch = afterFlight.match(/\[\[null,(\d+)\],"Cj/);
+    if (priceMatch) {
+      const p = parseInt(priceMatch[1]);
+      if (p > 0 && p < 50000) flightPrices[flightCode] = p;
+    }
   }
 
-  if (prices.length === 0) return null;
-  return Math.min(...prices);
+  // Also extract overall lowest price as fallback
+  let lowest = null;
+  const priceRe = /\[null,(\d+)\],"Cj/g;
+  while ((m = priceRe.exec(content)) !== null) {
+    const p = parseInt(m[1]);
+    if (p > 0 && p < 50000 && (lowest === null || p < lowest)) lowest = p;
+  }
+
+  return { flightPrices, lowest };
 }
