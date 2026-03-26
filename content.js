@@ -7,8 +7,10 @@
 
   const BUTTON_ID = 'seats-aero-btn';
   const FLIGHT_BTN_CLASS = 'seats-aero-flight-btn';
-  const FLIGHT_BTN_CONTAINER_CLASS = 'seats-aero-flight-btn-container';
   const SEARCH_PATH = '/travel/flights/search';
+
+  // Cache page-level params — invalidated on navigation/DOM changes
+  let cachedPageParams = null;
 
   // Default settings — synced with popup.js
   let settings = {
@@ -2785,25 +2787,25 @@
       // Google Flights shows "Newark EWR" visually, but input.value is just "Newark"
       // The "EWR" is in a separate child element nearby
       if (inputVal) {
+        const iataContextRegex = new RegExp(
+          inputVal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+([A-Z]{3})', 'i'
+        );
         let container = input.parentElement;
         for (let i = 0; i < 5 && container; i++) {
-          // Search all child text nodes and spans for a 3-letter IATA code
-          const allChildren = container.querySelectorAll('span, div');
-          for (const child of allChildren) {
+          // Search direct children for standalone IATA codes (3 uppercase letters)
+          for (const child of container.children) {
             const childText = child.textContent.trim();
-            // Look for standalone IATA codes (exactly 3 uppercase letters)
             if (/^[A-Z]{3}$/.test(childText)) {
-              // Found an IATA code near the input — return "CityName CODE"
               return inputVal + ' ' + childText;
             }
           }
-          // Also check the container's direct text for "CityName CODE" pattern
+          // Check container text for "CityName CODE" pattern
           const containerText = container.textContent.trim();
-          const iataInContext = containerText.match(new RegExp(
-            inputVal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+([A-Z]{3})', 'i'
-          ));
-          if (iataInContext) {
-            return inputVal + ' ' + iataInContext[1].toUpperCase();
+          if (containerText.length < 60) {
+            const iataInContext = containerText.match(iataContextRegex);
+            if (iataInContext) {
+              return inputVal + ' ' + iataInContext[1].toUpperCase();
+            }
           }
           container = container.parentElement;
         }
@@ -2879,21 +2881,26 @@
 
   function extractAirportCodesFromResults(isOrigin) {
     const codes = new Set();
-    const allElements = document.querySelectorAll('span, div');
-    for (const el of allElements) {
-      const text = el.textContent.trim();
-      if (/^[A-Z]{3}\s*[–\-]\s*[A-Z]{3}$/.test(text)) {
-        const match = text.match(/([A-Z]{3})\s*[–\-]\s*([A-Z]{3})/);
-        if (match) codes.add(isOrigin ? match[1] : match[2]);
+    // Scope to flight result rows only, not the entire page
+    const flightRows = document.querySelectorAll('li.pIav2d');
+    for (const row of flightRows) {
+      for (const span of row.querySelectorAll('span')) {
+        const text = span.textContent.trim();
+        if (/^[A-Z]{3}$/.test(text)) {
+          codes.add(text);
+        }
       }
     }
-    if (codes.size === 0) {
-      const flightRows = document.querySelectorAll('li');
+    // Return only origin or destination codes based on position in route pairs
+    if (codes.size >= 2) {
+      // If we have multiple codes, try to identify origin vs destination from route patterns
+      const routeCodes = new Set();
       for (const row of flightRows) {
         const text = row.textContent || '';
-        const routeMatches = text.matchAll(/\b([A-Z]{3})\s*[–\-]\s*([A-Z]{3})\b/g);
-        for (const m of routeMatches) codes.add(isOrigin ? m[1] : m[2]);
+        const match = text.match(/\b([A-Z]{3})\s*[–\-]\s*([A-Z]{3})\b/);
+        if (match) routeCodes.add(isOrigin ? match[1] : match[2]);
       }
+      if (routeCodes.size > 0) return [...routeCodes];
     }
     return [...codes];
   }
@@ -2929,30 +2936,25 @@
     return returnInput ? 'round-trip' : 'one-way';
   }
 
+  function classifyCabin(text) {
+    const t = text.toLowerCase();
+    if (t.includes('first')) return 'first';
+    if (t.includes('business')) return 'business';
+    if (t.includes('premium')) return 'premium';
+    if (t.includes('economy')) return 'economy';
+    return null;
+  }
+
   function getCabinClass() {
-    const selectors = [
-      '[aria-label*="seating class"]', '[aria-label*="cabin"]',
-    ];
-    for (const sel of selectors) {
-      const el = document.querySelector(sel);
-      if (el) {
-        const text = (el.textContent || el.getAttribute('aria-label') || '').toLowerCase();
-        if (text.includes('first')) return 'first';
-        if (text.includes('business')) return 'business';
-        if (text.includes('premium')) return 'premium';
-        if (text.includes('economy')) return 'economy';
-      }
+    const el = document.querySelector('[aria-label*="seating class"], [aria-label*="cabin"]');
+    if (el) {
+      const result = classifyCabin(el.textContent || el.getAttribute('aria-label') || '');
+      if (result) return result;
     }
-    // Check combobox divs
     const comboboxes = document.querySelectorAll('div[role="combobox"]');
     for (const cb of comboboxes) {
-      const text = (cb.textContent || '').toLowerCase();
-      if (text.includes('economy') || text.includes('business') || text.includes('first') || text.includes('premium')) {
-        if (text.includes('first')) return 'first';
-        if (text.includes('business')) return 'business';
-        if (text.includes('premium')) return 'premium';
-        return 'economy';
-      }
+      const result = classifyCabin(cb.textContent || '');
+      if (result) return result;
     }
     return 'economy';
   }
@@ -2989,56 +2991,37 @@
    * 3. Also check for airline chips/tags that appear when filtered
    */
   function getSelectedAirlines() {
-    // Look for the Airlines filter button
-    const allBtns = document.querySelectorAll('button, [role="button"]');
+    // Scope to filter bar area when possible
+    const filterBar = document.querySelector('[aria-label*="All filters"]')?.parentElement?.parentElement;
+    const btns = (filterBar || document).querySelectorAll('button, [role="button"]');
 
-    for (const btn of allBtns) {
+    for (const btn of btns) {
       const label = (btn.getAttribute('aria-label') || '').toLowerCase();
       const text = (btn.textContent || '').trim();
 
-      // Skip if not the Airlines filter
       if (!label.includes('airlines') && text !== 'Airlines') continue;
-
-      // Check if the filter is in default state (no selection)
       if (label.includes('not selected') || text === 'Airlines') continue;
 
-      // Filter is active — try to extract airline names from the button area
-      // When airlines are selected, Google Flights may show them as text
+      // Filter is active — extract airline names
       const codes = [];
 
-      // Strategy 1: Check the button text for airline names
-      if (typeof AIRLINE_CODES !== 'undefined') {
-        for (const [name, code] of Object.entries(AIRLINE_CODES)) {
-          if (text.includes(name) && !codes.includes(code)) {
-            codes.push(code);
-          }
-        }
+      for (const [name, code] of Object.entries(AIRLINE_CODES)) {
+        if (text.includes(name) && !codes.includes(code)) codes.push(code);
       }
-
       if (codes.length > 0) return codes;
 
-      // Strategy 2: Look for a nearby container with airline filter chips
+      // Check for airline filter chips
       const parent = btn.closest('[role="listbox"]') || btn.parentElement?.parentElement;
       if (parent) {
-        const chips = parent.querySelectorAll('[aria-selected="true"], [aria-checked="true"]');
-        for (const chip of chips) {
-          const chipText = chip.textContent.trim();
-          if (typeof AIRLINE_CODES !== 'undefined' && AIRLINE_CODES[chipText]) {
-            const code = AIRLINE_CODES[chipText];
-            if (!codes.includes(code)) codes.push(code);
-          }
+        for (const chip of parent.querySelectorAll('[aria-selected="true"], [aria-checked="true"]')) {
+          const code = AIRLINE_CODES[chip.textContent.trim()];
+          if (code && !codes.includes(code)) codes.push(code);
         }
         if (codes.length > 0) return codes;
       }
 
-      // Strategy 3: If the filter shows "Only" for one airline, the button text
-      // changes to just that airline name
-      if (text.length > 0 && text !== 'Airlines') {
-        // The text might be a single airline name like "United" or "Delta"
-        if (typeof AIRLINE_CODES !== 'undefined' && AIRLINE_CODES[text]) {
-          return [AIRLINE_CODES[text]];
-        }
-      }
+      // Single airline name on the button
+      if (AIRLINE_CODES[text]) return [AIRLINE_CODES[text]];
     }
 
     return [];
@@ -3130,8 +3113,6 @@
     if (error) {
       // Show visible error on the button
       btn.classList.add('seats-aero-error');
-      const originalContent = btn.textContent;
-      // Clear and set error text using DOM (no innerHTML for Trusted Types)
       while (btn.firstChild) btn.removeChild(btn.firstChild);
       btn.appendChild(document.createTextNode('⚠ ' + error));
       btn.title = error;
@@ -3155,64 +3136,42 @@
    */
   function extractFlightData(li) {
     const spans = li.querySelectorAll('span');
-    let origin = '', dest = '';
     const airportCodes = [];
+    let airline = '', airlineCode = '', isNonstop = false;
 
-    // Get IATA codes from spans showing exactly 3 uppercase letters
+    // Single pass over all spans: collect IATA codes, airline, nonstop status
     for (const span of spans) {
       const t = span.textContent.trim();
       if (/^[A-Z]{3}$/.test(t)) airportCodes.push(t);
+      if (t === 'Nonstop') isNonstop = true;
+      if (!airline && AIRLINE_CODES[t]) {
+        airline = t;
+        airlineCode = AIRLINE_CODES[t];
+      } else if (!airline && t.includes('·')) {
+        const firstAirline = t.split('·')[0].trim();
+        if (AIRLINE_CODES[firstAirline]) {
+          airline = firstAirline;
+          airlineCode = AIRLINE_CODES[firstAirline];
+        }
+      }
     }
 
-    // First two unique codes are typically origin and destination
+    // Need at least 2 unique airport codes (origin + destination)
+    let origin = '', dest = '';
     if (airportCodes.length >= 2) {
       origin = airportCodes[0];
-      // Find first code that differs from origin
       for (let i = 1; i < airportCodes.length; i++) {
         if (airportCodes[i] !== origin) { dest = airportCodes[i]; break; }
       }
     }
-
     if (!origin || !dest) return null;
 
-    // Extract airline name — look for known airline names in spans
-    let airline = '';
-    let airlineCode = '';
-    for (const span of spans) {
-      const t = span.textContent.trim();
-      // Check against our airline lookup
-      if (typeof AIRLINE_CODES !== 'undefined' && AIRLINE_CODES[t]) {
-        airline = t;
-        airlineCode = AIRLINE_CODES[t];
-        break;
-      }
-      // Also handle codeshare format "Alaska · Hawaiian" — take the first airline
-      if (t.includes('·')) {
-        const firstAirline = t.split('·')[0].trim();
-        if (typeof AIRLINE_CODES !== 'undefined' && AIRLINE_CODES[firstAirline]) {
-          airline = firstAirline;
-          airlineCode = AIRLINE_CODES[firstAirline];
-          break;
-        }
-      }
-    }
-
-    // Fallback: try matching any known airline name in the full row text
-    if (!airline && typeof AIRLINE_CODES !== 'undefined') {
+    // Fallback airline detection from full row text
+    if (!airline) {
       const rowText = li.textContent || '';
       for (const [name, code] of Object.entries(AIRLINE_CODES)) {
-        if (rowText.includes(name)) {
-          airline = name;
-          airlineCode = code;
-          break;
-        }
+        if (rowText.includes(name)) { airline = name; airlineCode = code; break; }
       }
-    }
-
-    // Check if this flight is nonstop
-    let isNonstop = false;
-    for (const span of spans) {
-      if (span.textContent.trim() === 'Nonstop') { isNonstop = true; break; }
     }
 
     return { origin, dest, airline, airlineCode, isNonstop };
@@ -3243,20 +3202,29 @@
     return btn;
   }
 
-  function handleFlightButtonClick(flightData, btn) {
-    // Get shared params from the page
+  function getPageParams() {
+    if (cachedPageParams) return cachedPageParams;
     const departureDateText = getFieldValue('Departure');
     const departureDate = parseDate(departureDateText);
+    if (!departureDate) return null;
+    cachedPageParams = {
+      departureDate,
+      cabin: getCabinClass(),
+      passengers: getPassengerCount(),
+      flexDays: settings.flexibleDays ? 3 : 0,
+    };
+    return cachedPageParams;
+  }
 
-    if (!departureDate) {
+  function handleFlightButtonClick(flightData, btn) {
+    const pageParams = getPageParams();
+    if (!pageParams) {
       btn.classList.add('seats-aero-error');
       setTimeout(() => btn.classList.remove('seats-aero-error'), 3000);
       return;
     }
 
-    const cabin = getCabinClass();
-    const passengers = getPassengerCount();
-    const flexDays = settings.flexibleDays ? 3 : 0;
+    const { departureDate, cabin, passengers, flexDays } = pageParams;
 
     const params = {
       origins: flightData.origin,
@@ -3295,12 +3263,7 @@
       if (expandBtn) {
         const chevronContainer = expandBtn.closest('.vJccne') || expandBtn.parentElement?.parentElement;
         if (chevronContainer) {
-          // Make it a flex column so the Points button stacks above the chevron
-          chevronContainer.style.display = 'flex';
-          chevronContainer.style.flexDirection = 'column';
-          chevronContainer.style.alignItems = 'center';
-          chevronContainer.style.justifyContent = 'center';
-          chevronContainer.style.gap = '4px';
+          chevronContainer.classList.add('seats-aero-chevron-layout');
           chevronContainer.insertBefore(btn, chevronContainer.firstChild);
           continue;
         }
@@ -3407,6 +3370,7 @@
     const currentUrl = location.href;
     if (currentUrl !== lastUrl) {
       lastUrl = currentUrl;
+      cachedPageParams = null;
       if (isResultsPage()) {
         setTimeout(() => injectAll(), 800);
       } else {
@@ -3422,9 +3386,8 @@
       if (!isResultsPage()) return;
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
-        // Re-inject global button if removed
+        cachedPageParams = null;
         if (!document.getElementById(BUTTON_ID)) injectGlobalButton();
-        // Inject per-flight buttons on any new flight rows
         injectPerFlightButtons();
         applySettingsToPage();
       }, 500);

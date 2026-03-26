@@ -119,6 +119,16 @@
   box-shadow: none;
 }
 
+/* ── Chevron container layout (for per-flight buttons) ── */
+
+.seats-aero-chevron-layout {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
 /* ── Visibility toggles ── */
 
 body.seats-aero-hide-per-flight .seats-aero-flight-btn {
