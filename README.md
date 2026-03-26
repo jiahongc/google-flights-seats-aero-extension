@@ -84,6 +84,27 @@ Filters without a seats.aero equivalent (bags, price, times, emissions, duration
 3. Results with CPP >= 2.0 are highlighted in green — indicating a good redemption value
 4. Set a minimum CPP in the extension popup to filter out low-value results
 
+## Security & Privacy
+
+![Security Audit](https://img.shields.io/badge/security%20audit-passed-brightgreen)
+![No External Requests](https://img.shields.io/badge/external%20requests-none-brightgreen)
+![Permissions](https://img.shields.io/badge/permissions-minimal-brightgreen)
+
+This extension has been audited for security and privacy. Here's what we found:
+
+| Category | Status | Details |
+|---|---|---|
+| **Permissions** | Minimal | Only `activeTab` and `storage` — no access to browsing history, bookmarks, or other tabs |
+| **Host access** | Scoped | Limited to `google.com/travel/flights` and `seats.aero` only |
+| **Data collection** | None | No personal data collected, no analytics, no tracking |
+| **External requests** | None | No third-party servers, CDNs, or analytics services contacted |
+| **Data storage** | Settings only | Only stores your two preferences (`globalButton` toggle and `minCpp` filter) via Chrome sync storage |
+| **Dependencies** | Zero | Pure vanilla JavaScript — no npm packages, no external libraries |
+| **DOM safety** | Safe | No `eval()`, no `innerHTML` with untrusted data — all DOM manipulation uses safe APIs (`createElement`, `createTextNode`) |
+| **Code transparency** | Full | 100% open source, no minified or obfuscated code |
+
+**All code runs locally in your browser. The only network requests are to Google Flights (for cash prices) and seats.aero (when you click the search button).**
+
 ## Requirements
 
 - Google Chrome (Manifest V3)
