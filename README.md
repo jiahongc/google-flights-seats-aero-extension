@@ -2,7 +2,9 @@
 
 A Chrome extension that adds award flight search buttons to Google Flights. One click opens [seats.aero](https://seats.aero) with your flight search filters pre-filled.
 
-![Extension screenshot](https://github.com/user-attachments/assets/placeholder.png)
+| Global search button | Per-flight buttons | Popup settings |
+|---|---|---|
+| ![Global button](screenshots/global-button.png) | ![Per-flight buttons](screenshots/per-flight-buttons.png) | ![Popup settings](screenshots/popup-settings.png) |
 
 ## Features
 
@@ -11,7 +13,9 @@ A Chrome extension that adds award flight search buttons to Google Flights. One 
 - **Smart filter mapping** — automatically transfers origin, destination, date, cabin class, passenger count, nonstop filter, and airline to seats.aero
 - **Nonstop detection** — nonstop flights automatically check "Only direct flights" on seats.aero
 - **Individual Flights view** — per-flight searches open in "Individual Flights" mode for detailed departure-time results
-- **Extension popup** — toggle global button, per-flight buttons, and flexible dates (±3 days) on/off
+- **Reverse search button** — one-way searches get a "↩ Return" button to quickly check the reverse direction
+- **Configurable flexible dates** — search ±3, ±5, ±7, or ±14 days around your date
+- **Extension popup** — toggle global button, per-flight buttons, and flexible date range
 
 ## Filter Mapping
 
