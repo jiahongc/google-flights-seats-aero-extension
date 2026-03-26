@@ -4,6 +4,10 @@ A Chrome extension that bridges [Google Flights](https://www.google.com/travel/f
 
 Search award availability from Google Flights with one click, and see Google Flights cash prices with cents-per-point (CPP) calculations on seats.aero results.
 
+## Demo
+
+https://github.com/user-attachments/assets/d69b9272-b720-48ab-a747-9acca5a5d7e3
+
 ## Screenshots
 
 | Google Flights | seats.aero | Settings |
@@ -13,13 +17,12 @@ Search award availability from Google Flights with one click, and see Google Fli
 ## Features
 
 ### Google Flights → seats.aero
-- **Search button** — appears in the Google Flights filter bar next to "All filters", opens seats.aero with your route pre-filled
+- **Search button** — appears in the Google Flights filter bar, opens seats.aero with your route pre-filled
 - **Smart filter mapping** — automatically transfers origin, destination, date, cabin class, passenger count, nonstop filter, and airline selection
 - **Round-trip support** — opens two tabs (outbound + return) for round-trip searches
 
 ### seats.aero → Google Flights
-- **Google Flights links** — clickable links on every award result that open Google Flights with the correct route, date, cabin, and airline
-- **Cash price + CPP** — fetches the actual Google Flights cash price and calculates cents-per-point inline (e.g., "$352 · 1.41cpp")
+- **Cash price + CPP** — fetches the actual Google Flights cash price and calculates cents-per-point inline on every award result (e.g., "$352 · 1.41cpp")
 - **Per-flight pricing** — matches the exact flight number to its specific cash price, not just the cheapest on the route
 - **CPP color coding** — green highlight when CPP >= 2.0 (great redemption value)
 - **Min CPP filter** — set a minimum CPP threshold in the popup to hide low-value redemptions
@@ -56,8 +59,8 @@ Filters without a seats.aero equivalent (bags, price, times, emissions, duration
 
 ### On seats.aero
 1. Search for award availability on [seats.aero](https://seats.aero)
-2. Each result shows a Google Flights link with the cash price and CPP value
-3. Green links indicate CPP >= 2.0 — a good redemption value
+2. Each result shows the Google Flights cash price and CPP value inline
+3. Results with CPP >= 2.0 are highlighted in green — indicating a good redemption value
 4. Set a minimum CPP in the extension popup to filter out low-value results
 
 ## Requirements
@@ -72,7 +75,7 @@ Filters without a seats.aero equivalent (bags, price, times, emissions, duration
 ├── content.js         # Google Flights content script: button injection, filter extraction
 ├── seats-content.js   # seats.aero content script: link injection, CPP calculation
 ├── protobuf.js        # Protobuf encoder for Google Flights deep-link URLs
-├── background.js      # Service worker: tab creation + price fetching with LRU cache
+├── background.js      # Service worker: tab management + Google Flights price fetching with LRU cache
 ├── airlines.js        # Airline name → IATA code lookup (~100 airlines)
 ├── metros.js          # City/metro name → IATA airport code lookup
 ├── styles.css         # Button styling for Google Flights
