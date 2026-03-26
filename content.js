@@ -77,6 +77,13 @@
     'kuala lumpur': 'KUL', 'jakarta': 'CGK', 'manila': 'MNL',
     'ho chi minh city': 'SGN', 'hanoi': 'HAN',
     'auckland': 'AKL', 'perth': 'PER', 'brisbane': 'BNE',
+    // Single-airport cities (not metro codes, but common Google Flights origins)
+    'newark': 'EWR', 'laguardia': 'LGA',
+    'oakland': 'OAK', 'san jose': 'SJC', 'burbank': 'BUR',
+    'long beach': 'LGB', 'ontario': 'ONT', 'fort lauderdale': 'FLL',
+    'midway': 'MDW', 'dulles': 'IAD', 'reagan': 'DCA',
+    'ronald reagan': 'DCA', 'love field': 'DAL',
+    'hobby': 'HOU', 'john wayne': 'SNA', 'santa ana': 'SNA',
   };
 
   // ─── SVG icon helper (DOM-based, avoids innerHTML for Trusted Types) ──
@@ -113,20 +120,42 @@
   function getFieldValue(ariaLabelSubstring) {
     const input = findInput(ariaLabelSubstring);
     if (input) {
-      if (input.value && input.value.trim()) return input.value.trim();
+      // Strategy 1: input.value (may be just city name like "Newark")
+      const inputVal = (input.value || '').trim();
 
-      // Walk up DOM looking for display text
+      // Strategy 2: Look at the visual display around the input for IATA codes
+      // Google Flights shows "Newark EWR" but input.value may be just "Newark"
+      // The "EWR" part is often in a sibling span or the parent's text
+      let fullDisplayText = inputVal;
       let container = input.parentElement;
+      for (let i = 0; i < 4 && container; i++) {
+        const containerText = container.textContent.trim();
+        // Look for pattern "CityName CODE" where CODE is 3 uppercase letters
+        const displayMatch = containerText.match(/^([A-Za-z\s.]+)\s+([A-Z]{3})$/);
+        if (displayMatch) {
+          fullDisplayText = containerText;
+          break;
+        }
+        // Also check for short enough text that includes the input value
+        if (containerText.length > 1 && containerText.length < 40 &&
+            containerText.toLowerCase().includes(inputVal.toLowerCase()) &&
+            containerText !== inputVal) {
+          fullDisplayText = containerText;
+          break;
+        }
+        container = container.parentElement;
+      }
+
+      if (fullDisplayText) return fullDisplayText;
+      if (inputVal) return inputVal;
+
+      // Strategy 3: data-value attributes
+      container = input.parentElement;
       for (let i = 0; i < 6 && container; i++) {
         const candidates = container.querySelectorAll('[data-value]');
         for (const el of candidates) {
           const dataVal = el.getAttribute('data-value');
           if (dataVal && dataVal.trim()) return dataVal.trim();
-        }
-        const directText = container.textContent.trim();
-        if (directText.length > 1 && directText.length < 50) {
-          const cleaned = directText.replace(/Where (from|to)\??/gi, '').trim();
-          if (cleaned.length > 1) return cleaned;
         }
         container = container.parentElement;
       }
@@ -427,12 +456,20 @@
     const btn = document.getElementById(BUTTON_ID);
     const { urls, error } = extractGlobalParams();
     if (error) {
+      // Show visible error on the button
       btn.classList.add('seats-aero-error');
+      const originalContent = btn.textContent;
+      // Clear and set error text using DOM (no innerHTML for Trusted Types)
+      while (btn.firstChild) btn.removeChild(btn.firstChild);
+      btn.appendChild(document.createTextNode('⚠ ' + error));
       btn.title = error;
       setTimeout(() => {
         btn.classList.remove('seats-aero-error');
+        while (btn.firstChild) btn.removeChild(btn.firstChild);
+        btn.appendChild(createPlaneIcon(16));
+        btn.appendChild(document.createTextNode(' Search on seats.aero'));
         btn.title = 'Search this route on seats.aero for award availability';
-      }, 3000);
+      }, 5000);
       return;
     }
     openSeatsAero(urls);
