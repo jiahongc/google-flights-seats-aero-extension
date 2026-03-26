@@ -21,17 +21,13 @@ https://github.com/user-attachments/assets/d69b9272-b720-48ab-a747-9acca5a5d7e3
 
 ## Screenshots
 
-### Google Flights
-![Global button](screenshots/global-button.png)
+| Google Flights | Settings |
+|---|---|
+| <img src="screenshots/global-button.png" width="400"> | <img src="screenshots/popup-settings.png" width="250"> |
 
-### seats.aero — Individual Flights
-![Individual Flights with CPP](screenshots/seats-aero-prices.png)
-
-### seats.aero — Program Summary
-![Program Summary with cash prices](screenshots/seats-aero-program-summary.png)
-
-### Settings
-![Popup settings](screenshots/popup-settings.png)
+| seats.aero — Individual Flights | seats.aero — Program Summary |
+|---|---|
+| <img src="screenshots/seats-aero-prices.png" width="400"> | <img src="screenshots/seats-aero-program-summary.png" width="400"> |
 
 ## Features
 
