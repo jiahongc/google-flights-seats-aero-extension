@@ -4,15 +4,34 @@ A Chrome extension that bridges [Google Flights](https://www.google.com/travel/f
 
 Search award availability from Google Flights with one click, and see Google Flights cash prices with cents-per-point (CPP) calculations on seats.aero results.
 
+## Why?
+
+Award travel search is a two-tab problem. You check Google Flights for cash prices, then separately search seats.aero for award availability — manually copying routes, dates, and cabin classes between the two. And even when you find award space, you have no easy way to know if it's actually a good deal.
+
+This extension bridges the gap:
+
+- **From Google Flights**, one click searches seats.aero with all your filters pre-filled — no manual re-entry.
+- **From seats.aero**, every award result automatically shows the equivalent Google Flights cash price and a cents-per-point (CPP) value, so you can instantly tell whether burning points is worth it or if you should just pay cash.
+
+A CPP of 2.0+ generally means you're getting great value from your points. Below 1.0 and you're better off paying cash. Without this context, you're flying blind.
+
 ## Demo
 
 https://github.com/user-attachments/assets/d69b9272-b720-48ab-a747-9acca5a5d7e3
 
 ## Screenshots
 
-| Google Flights | seats.aero | Settings |
-|---|---|---|
-| ![Global button](screenshots/global-button.png) | ![seats.aero prices](screenshots/seats-aero-prices.png) | ![Popup settings](screenshots/popup-settings.png) |
+### Google Flights
+![Global button](screenshots/global-button.png)
+
+### seats.aero — Individual Flights
+![Individual Flights with CPP](screenshots/seats-aero-prices.png)
+
+### seats.aero — Program Summary
+![Program Summary with cash prices](screenshots/seats-aero-program-summary.png)
+
+### Settings
+![Popup settings](screenshots/popup-settings.png)
 
 ## Features
 
@@ -22,11 +41,19 @@ https://github.com/user-attachments/assets/d69b9272-b720-48ab-a747-9acca5a5d7e3
 - **Round-trip support** — opens two tabs (outbound + return) for round-trip searches
 
 ### seats.aero → Google Flights
-- **Cash price + CPP** — fetches the actual Google Flights cash price and calculates cents-per-point inline on every award result (e.g., "$352 · 1.41cpp")
-- **Per-flight pricing** — matches the exact flight number to its specific cash price, not just the cheapest on the route
-- **CPP color coding** — green highlight when CPP >= 2.0 (great redemption value)
+
+Works on both seats.aero views with different levels of detail:
+
+**Individual Flights** — shows the exact cash price and CPP for each specific flight
+- Matches the flight number to its specific Google Flights cash price (e.g., "$352 · 1.41cpp")
+- Green highlight when CPP >= 2.0 (great redemption value)
+
+**Program Summary** — shows the lowest cash price on the route as a reference
+- Displays "from $X" since the points cost and cash price may not correspond to the same flight
+- Useful for quickly scanning which routes have cheap cash alternatives
+
+**Both views:**
 - **Min CPP filter** — set a minimum CPP threshold in the popup to hide low-value redemptions
-- **Both views supported** — works on Individual Flights and Program Summary tables
 
 ## Filter Mapping
 
