@@ -273,6 +273,76 @@
     return 1;
   }
 
+  /**
+   * Extract selected airlines from the Google Flights Airlines filter.
+   *
+   * Google Flights Airlines filter behavior:
+   * - Default (no filter): button text is "Airlines" and aria-label is "Airlines, Not selected"
+   * - With filter: aria-label changes to e.g. "Airlines, 1 of 16 selected" or similar
+   *   and the dropdown shows checkboxes with airline names
+   *
+   * Strategy:
+   * 1. Check if the Airlines filter is active (aria-label indicates selection)
+   * 2. Open the dropdown programmatically is not feasible, so we look for
+   *    airline names in the filter button's text or nearby elements
+   * 3. Also check for airline chips/tags that appear when filtered
+   */
+  function getSelectedAirlines() {
+    // Look for the Airlines filter button
+    const allBtns = document.querySelectorAll('button, [role="button"]');
+
+    for (const btn of allBtns) {
+      const label = (btn.getAttribute('aria-label') || '').toLowerCase();
+      const text = (btn.textContent || '').trim();
+
+      // Skip if not the Airlines filter
+      if (!label.includes('airlines') && text !== 'Airlines') continue;
+
+      // Check if the filter is in default state (no selection)
+      if (label.includes('not selected') || text === 'Airlines') continue;
+
+      // Filter is active — try to extract airline names from the button area
+      // When airlines are selected, Google Flights may show them as text
+      const codes = [];
+
+      // Strategy 1: Check the button text for airline names
+      if (typeof AIRLINE_CODES !== 'undefined') {
+        for (const [name, code] of Object.entries(AIRLINE_CODES)) {
+          if (text.includes(name) && !codes.includes(code)) {
+            codes.push(code);
+          }
+        }
+      }
+
+      if (codes.length > 0) return codes;
+
+      // Strategy 2: Look for a nearby container with airline filter chips
+      const parent = btn.closest('[role="listbox"]') || btn.parentElement?.parentElement;
+      if (parent) {
+        const chips = parent.querySelectorAll('[aria-selected="true"], [aria-checked="true"]');
+        for (const chip of chips) {
+          const chipText = chip.textContent.trim();
+          if (typeof AIRLINE_CODES !== 'undefined' && AIRLINE_CODES[chipText]) {
+            const code = AIRLINE_CODES[chipText];
+            if (!codes.includes(code)) codes.push(code);
+          }
+        }
+        if (codes.length > 0) return codes;
+      }
+
+      // Strategy 3: If the filter shows "Only" for one airline, the button text
+      // changes to just that airline name
+      if (text.length > 0 && text !== 'Airlines') {
+        // The text might be a single airline name like "United" or "Delta"
+        if (typeof AIRLINE_CODES !== 'undefined' && AIRLINE_CODES[text]) {
+          return [AIRLINE_CODES[text]];
+        }
+      }
+    }
+
+    return [];
+  }
+
   // ─── URL construction ────────────────────────────────────────────
 
   function buildSeatsAeroUrl(params) {
@@ -335,7 +405,8 @@
     const passengers = getPassengerCount();
     const flexDays = settings.flexibleDays ? 3 : 0;
 
-    const baseParams = { cabin, directOnly, airlines: [], passengers, flexibleDays: flexDays };
+    const airlines = getSelectedAirlines();
+    const baseParams = { cabin, directOnly, airlines, passengers, flexibleDays: flexDays };
     const urls = [];
 
     urls.push(buildSeatsAeroUrl({ origins, destinations, date: departureDate, ...baseParams }));
