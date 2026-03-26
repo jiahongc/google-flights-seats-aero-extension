@@ -43,13 +43,11 @@ Works on both seats.aero views with different levels of detail:
 **Individual Flights** — shows the exact cash price and CPP for each specific flight
 - Matches the flight number to its specific Google Flights cash price (e.g., "$352 · 1.41cpp")
 - Green highlight when CPP >= 2.0 (great redemption value)
+- **Min CPP filter** — set a minimum CPP threshold in the popup to hide low-value redemptions
 
 **Program Summary** — shows the lowest cash price on the route as a reference
 - Displays "from $X" since the points cost and cash price may not correspond to the same flight
 - Useful for quickly scanning which routes have cheap cash alternatives
-
-**Both views:**
-- **Min CPP filter** — set a minimum CPP threshold in the popup to hide low-value redemptions
 
 ## Filter Mapping
 
