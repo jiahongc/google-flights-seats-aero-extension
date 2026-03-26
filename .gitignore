@@ -1,0 +1,5 @@
+.playwright-mcp/
+*.png.bak
+.DS_Store
+docs/
+seats-aero-search-page.png
