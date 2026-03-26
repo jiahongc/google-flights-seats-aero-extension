@@ -123,34 +123,38 @@
       // Strategy 1: input.value (may be just city name like "Newark")
       const inputVal = (input.value || '').trim();
 
-      // Strategy 2: Look at the visual display around the input for IATA codes
-      // Google Flights shows "Newark EWR" but input.value may be just "Newark"
-      // The "EWR" part is often in a sibling span or the parent's text
-      let fullDisplayText = inputVal;
-      let container = input.parentElement;
-      for (let i = 0; i < 4 && container; i++) {
-        const containerText = container.textContent.trim();
-        // Look for pattern "CityName CODE" where CODE is 3 uppercase letters
-        const displayMatch = containerText.match(/^([A-Za-z\s.]+)\s+([A-Z]{3})$/);
-        if (displayMatch) {
-          fullDisplayText = containerText;
-          break;
+      // Strategy 2: Look for IATA codes near the input in the DOM
+      // Google Flights shows "Newark EWR" visually, but input.value is just "Newark"
+      // The "EWR" is in a separate child element nearby
+      if (inputVal) {
+        let container = input.parentElement;
+        for (let i = 0; i < 5 && container; i++) {
+          // Search all child text nodes and spans for a 3-letter IATA code
+          const allChildren = container.querySelectorAll('span, div');
+          for (const child of allChildren) {
+            const childText = child.textContent.trim();
+            // Look for standalone IATA codes (exactly 3 uppercase letters)
+            if (/^[A-Z]{3}$/.test(childText)) {
+              // Found an IATA code near the input — return "CityName CODE"
+              return inputVal + ' ' + childText;
+            }
+          }
+          // Also check the container's direct text for "CityName CODE" pattern
+          const containerText = container.textContent.trim();
+          const iataInContext = containerText.match(new RegExp(
+            inputVal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+([A-Z]{3})', 'i'
+          ));
+          if (iataInContext) {
+            return inputVal + ' ' + iataInContext[1].toUpperCase();
+          }
+          container = container.parentElement;
         }
-        // Also check for short enough text that includes the input value
-        if (containerText.length > 1 && containerText.length < 40 &&
-            containerText.toLowerCase().includes(inputVal.toLowerCase()) &&
-            containerText !== inputVal) {
-          fullDisplayText = containerText;
-          break;
-        }
-        container = container.parentElement;
+        // No IATA code found nearby — return just the city name
+        return inputVal;
       }
 
-      if (fullDisplayText) return fullDisplayText;
-      if (inputVal) return inputVal;
-
-      // Strategy 3: data-value attributes
-      container = input.parentElement;
+      // Strategy 3: data-value attributes (for date fields etc.)
+      let container = input.parentElement;
       for (let i = 0; i < 6 && container; i++) {
         const candidates = container.querySelectorAll('[data-value]');
         for (const el of candidates) {
@@ -201,6 +205,16 @@
     // Extract from flight result rows
     const codes = extractAirportCodesFromResults(isOrigin);
     if (codes.length > 0) return codes.join(',');
+
+    // Last resort: extract from page title ("Newark to Dallas | Google Flights")
+    const titleData = extractFromPageTitle();
+    if (titleData) {
+      const titleText = isOrigin ? titleData.origin : titleData.destination;
+      if (titleText && titleText !== text) {
+        const titleCode = resolveAirportCode(titleText, isOrigin);
+        if (titleCode) return titleCode;
+      }
+    }
 
     return null;
   }
