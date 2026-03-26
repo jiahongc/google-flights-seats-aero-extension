@@ -129,6 +129,41 @@
   gap: 4px;
 }
 
+/* ── Reverse search button ── */
+
+.seats-aero-reverse-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  margin-left: 6px;
+  border: 1px solid #1a73e8;
+  border-radius: 20px;
+  background-color: transparent;
+  color: #1a73e8;
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+  line-height: 20px;
+  vertical-align: middle;
+}
+
+.seats-aero-reverse-btn:hover {
+  background-color: #e8f0fe;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.seats-aero-reverse-btn:active {
+  background-color: #d2e3fc;
+}
+
+body.seats-aero-hide-global .seats-aero-reverse-btn {
+  display: none;
+}
+
 /* ── Visibility toggles ── */
 
 body.seats-aero-hide-per-flight .seats-aero-flight-btn {

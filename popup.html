@@ -116,6 +116,29 @@
       outline-offset: 2px;
     }
 
+    /* Dropdown select */
+    .setting-select {
+      background: #2d2d44;
+      color: #c8c8d4;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      outline: none;
+      flex-shrink: 0;
+      margin-left: 12px;
+    }
+
+    .setting-select:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .setting-select:focus {
+      border-color: #1a73e8;
+    }
+
     .footer {
       padding: 14px 20px;
       border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -153,11 +176,14 @@
     </div>
 
     <div class="setting-row">
-      <label class="setting-label" for="flexibleDays">Flexible dates (±3 days)</label>
-      <label class="toggle">
-        <input type="checkbox" id="flexibleDays">
-        <span class="toggle-track"></span>
-      </label>
+      <label class="setting-label" for="flexibleDaysNum">Flexible dates</label>
+      <select id="flexibleDaysNum" class="setting-select">
+        <option value="0">Off</option>
+        <option value="3">±3 days</option>
+        <option value="5">±5 days</option>
+        <option value="7">±7 days</option>
+        <option value="14">±14 days</option>
+      </select>
     </div>
   </div>
 

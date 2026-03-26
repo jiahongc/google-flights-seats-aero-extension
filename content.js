@@ -7,6 +7,7 @@
 
   const BUTTON_ID = 'seats-aero-btn';
   const FLIGHT_BTN_CLASS = 'seats-aero-flight-btn';
+  const REVERSE_BTN_ID = 'seats-aero-reverse-btn';
   const SEARCH_PATH = '/travel/flights/search';
 
   // Cache page-level params — invalidated on navigation/DOM changes
@@ -16,7 +17,7 @@
   let settings = {
     globalButton: true,
     perFlightButtons: true,
-    flexibleDays: false,
+    flexibleDaysNum: 0,
   };
 
   // Load settings from storage
@@ -2991,40 +2992,55 @@
    * 3. Also check for airline chips/tags that appear when filtered
    */
   function getSelectedAirlines() {
-    // Scope to filter bar area when possible
+    // Check if the Airlines filter is active
     const filterBar = document.querySelector('[aria-label*="All filters"]')?.parentElement?.parentElement;
     const btns = (filterBar || document).querySelectorAll('button, [role="button"]');
 
+    let airlinesBtn = null;
     for (const btn of btns) {
       const label = (btn.getAttribute('aria-label') || '').toLowerCase();
       const text = (btn.textContent || '').trim();
-
       if (!label.includes('airlines') && text !== 'Airlines') continue;
       if (label.includes('not selected') || text === 'Airlines') continue;
-
-      // Filter is active — extract airline names
-      const codes = [];
-
-      for (const [name, code] of Object.entries(AIRLINE_CODES)) {
-        if (text.includes(name) && !codes.includes(code)) codes.push(code);
-      }
-      if (codes.length > 0) return codes;
-
-      // Check for airline filter chips
-      const parent = btn.closest('[role="listbox"]') || btn.parentElement?.parentElement;
-      if (parent) {
-        for (const chip of parent.querySelectorAll('[aria-selected="true"], [aria-checked="true"]')) {
-          const code = AIRLINE_CODES[chip.textContent.trim()];
-          if (code && !codes.includes(code)) codes.push(code);
-        }
-        if (codes.length > 0) return codes;
-      }
-
-      // Single airline name on the button
-      if (AIRLINE_CODES[text]) return [AIRLINE_CODES[text]];
+      airlinesBtn = btn;
+      break;
     }
 
-    return [];
+    if (!airlinesBtn) return [];
+
+    // Airlines filter is active — extract IATA codes from URL.
+    // Google Flights encodes airline selections in the `tfs` URL parameter as
+    // protobuf field 6 (tag byte 0x32), each a 2-byte IATA code: \x32\x02XX.
+    return extractAirlinesFromUrl();
+  }
+
+  function extractAirlinesFromUrl() {
+    const codes = [];
+    try {
+      const url = new URL(location.href);
+      const tfs = url.searchParams.get('tfs');
+      if (!tfs) return codes;
+
+      // Build a set of known IATA airline codes for validation
+      const knownCodes = new Set(Object.values(AIRLINE_CODES));
+
+      // Decode base64url (Google uses URL-safe base64)
+      const b64 = tfs.replace(/-/g, '+').replace(/_/g, '/');
+      const binary = atob(b64);
+
+      // Google Flights encodes selected airlines in the `tfs` protobuf as field 6
+      // (tag byte 0x32), wire type 2 (length-delimited), with 2-byte IATA codes.
+      // Pattern: \x32\x02 followed by a 2-char IATA airline code.
+      for (let i = 0; i < binary.length - 3; i++) {
+        if (binary.charCodeAt(i) === 0x32 && binary.charCodeAt(i + 1) === 0x02) {
+          const code = binary[i + 2] + binary[i + 3];
+          if (knownCodes.has(code) && !codes.includes(code)) codes.push(code);
+        }
+      }
+    } catch (e) {
+      // Silently fail — airline filter just won't be passed to seats.aero
+    }
+    return codes;
   }
 
   // ─── URL construction ────────────────────────────────────────────
@@ -3087,7 +3103,7 @@
     const cabin = getCabinClass();
     const directOnly = isNonstopFilterActive();
     const passengers = getPassengerCount();
-    const flexDays = settings.flexibleDays ? 3 : 0;
+    const flexDays = settings.flexibleDaysNum || 0;
 
     const airlines = getSelectedAirlines();
     const baseParams = { cabin, directOnly, airlines, passengers, flexibleDays: flexDays };
@@ -3211,7 +3227,7 @@
       departureDate,
       cabin: getCabinClass(),
       passengers: getPassengerCount(),
-      flexDays: settings.flexibleDays ? 3 : 0,
+      flexDays: settings.flexibleDaysNum || 0,
     };
     return cachedPageParams;
   }
@@ -3290,6 +3306,43 @@
     return btn;
   }
 
+  function createReverseButton() {
+    const btn = document.createElement('button');
+    btn.id = REVERSE_BTN_ID;
+    btn.className = 'seats-aero-reverse-btn';
+    btn.title = 'Search the return direction on seats.aero';
+    btn.textContent = '\u21A9 Return';
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const { urls, error } = extractGlobalParams();
+      if (error || urls.length === 0) return;
+      // extractGlobalParams returns outbound URL; we need to swap origin/dest
+      const outboundUrl = new URL(urls[0]);
+      const origins = outboundUrl.searchParams.get('origins');
+      const destinations = outboundUrl.searchParams.get('destinations');
+      outboundUrl.searchParams.set('origins', destinations);
+      outboundUrl.searchParams.set('destinations', origins);
+      openSeatsAero([outboundUrl.toString()]);
+    });
+    return btn;
+  }
+
+  function updateReverseButtonVisibility() {
+    const reverseBtn = document.getElementById(REVERSE_BTN_ID);
+    if (!reverseBtn) return;
+    const tripType = getTripType();
+    reverseBtn.style.display = tripType === 'round-trip' ? 'none' : '';
+  }
+
+  function injectReverseButton() {
+    if (document.getElementById(REVERSE_BTN_ID)) return;
+    const globalBtn = document.getElementById(BUTTON_ID);
+    if (!globalBtn) return;
+    const reverseBtn = createReverseButton();
+    globalBtn.insertAdjacentElement('afterend', reverseBtn);
+    updateReverseButtonVisibility();
+  }
+
   function injectGlobalButton() {
     if (document.getElementById(BUTTON_ID)) return;
 
@@ -3300,6 +3353,7 @@
       if (filterBar) {
         filterBar.appendChild(createGlobalButton());
         updateGlobalButtonState();
+        injectReverseButton();
         return;
       }
     }
@@ -3313,6 +3367,7 @@
         if (container && !container.querySelector(`#${BUTTON_ID}`)) {
           container.parentElement.appendChild(createGlobalButton());
           updateGlobalButtonState();
+          injectReverseButton();
           return;
         }
       }
@@ -3327,6 +3382,7 @@
         btn.style.display = 'flex';
         h.parentElement.insertBefore(btn, h);
         updateGlobalButtonState();
+        injectReverseButton();
         return;
       }
     }
@@ -3354,6 +3410,8 @@
   function removeAll() {
     const globalBtn = document.getElementById(BUTTON_ID);
     if (globalBtn) globalBtn.remove();
+    const reverseBtn = document.getElementById(REVERSE_BTN_ID);
+    if (reverseBtn) reverseBtn.remove();
     document.querySelectorAll('.' + FLIGHT_BTN_CLASS).forEach(el => el.remove());
   }
 
@@ -3388,6 +3446,8 @@
       debounceTimer = setTimeout(() => {
         cachedPageParams = null;
         if (!document.getElementById(BUTTON_ID)) injectGlobalButton();
+        if (!document.getElementById(REVERSE_BTN_ID)) injectReverseButton();
+        updateReverseButtonVisibility();
         injectPerFlightButtons();
         applySettingsToPage();
       }, 500);
