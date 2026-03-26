@@ -2838,16 +2838,16 @@
   function resolveAirportCode(text, isOrigin) {
     if (!text) return null;
 
-    // Check for explicit IATA code (uppercase 3 letters)
+    // Check for explicit IATA code (uppercase 3 letters, not an airline name)
     const iataMatch = text.match(/\b([A-Z]{3})\b/);
-    if (iataMatch) return iataMatch[1];
+    if (iataMatch && !AIRLINE_CODES[iataMatch[1]]) return iataMatch[1];
 
     // Case-insensitive trailing code (e.g., "Seattle Sea")
     const iataMatchCI = text.match(/\b([A-Za-z]{3})\s*$/);
     if (iataMatchCI) {
       const code = iataMatchCI[1].toUpperCase();
       const preceding = text.slice(0, iataMatchCI.index).trim();
-      if (preceding.length > 0) return code;
+      if (preceding.length > 0 && !AIRLINE_CODES[code]) return code;
     }
 
     // Metro code lookup
@@ -2887,7 +2887,7 @@
     for (const row of flightRows) {
       for (const span of row.querySelectorAll('span')) {
         const text = span.textContent.trim();
-        if (/^[A-Z]{3}$/.test(text)) {
+        if (/^[A-Z]{3}$/.test(text) && !AIRLINE_CODES[text]) {
           codes.add(text);
         }
       }
@@ -3158,7 +3158,7 @@
     // Single pass over all spans: collect IATA codes, airline, nonstop status
     for (const span of spans) {
       const t = span.textContent.trim();
-      if (/^[A-Z]{3}$/.test(t)) airportCodes.push(t);
+      if (/^[A-Z]{3}$/.test(t) && !AIRLINE_CODES[t]) airportCodes.push(t);
       if (t === 'Nonstop') isNonstop = true;
       if (!airline && AIRLINE_CODES[t]) {
         airline = t;
