@@ -84,6 +84,28 @@
     'midway': 'MDW', 'dulles': 'IAD', 'reagan': 'DCA',
     'ronald reagan': 'DCA', 'love field': 'DAL',
     'hobby': 'HOU', 'john wayne': 'SNA', 'santa ana': 'SNA',
+    // Additional international cities
+    'vancouver': 'YVR', 'calgary': 'YYC', 'edmonton': 'YEG', 'ottawa': 'YOW',
+    'reykjavik': 'KEF', 'edinburgh': 'EDI', 'manchester': 'MAN', 'glasgow': 'GLA',
+    'venice': 'VCE', 'florence': 'FLR', 'nice': 'NCE', 'lyon': 'LYS',
+    'berlin': 'BER', 'hamburg': 'HAM', 'düsseldorf': 'DUS', 'dusseldorf': 'DUS',
+    'porto': 'OPO', 'seville': 'SVQ', 'malaga': 'AGP',
+    'krakow': 'KRK', 'bucharest': 'OTP', 'belgrade': 'BEG', 'zagreb': 'ZAG',
+    'phuket': 'HKT', 'bali': 'DPS', 'denpasar': 'DPS',
+    'chiang mai': 'CNX', 'cebu': 'CEB', 'colombo': 'CMB',
+    'marrakech': 'RAK', 'casablanca': 'CMN', 'addis ababa': 'ADD',
+    'dar es salaam': 'DAR', 'accra': 'ACC',
+    'maldives': 'MLE', 'male': 'MLE', 'malé': 'MLE',
+    'fiji': 'NAN', 'nadi': 'NAN', 'tahiti': 'PPT',
+    'panama city': 'PTY', 'san juan': 'SJU', 'havana': 'HAV',
+    'cartagena': 'CTG', 'medellin': 'MDE', 'medellín': 'MDE',
+    'quito': 'UIO', 'guayaquil': 'GYE', 'montevideo': 'MVD',
+    'tel aviv': 'TLV', 'amman': 'AMM', 'muscat': 'MCT', 'bahrain': 'BAH',
+    'new delhi': 'DEL', 'bangalore': 'BLR', 'chennai': 'MAA', 'hyderabad': 'HYD',
+    'kolkata': 'CCU', 'ahmedabad': 'AMD', 'pune': 'PNQ', 'goa': 'GOI',
+    'guangzhou': 'CAN', 'shenzhen': 'SZX', 'chengdu': 'CTU', 'hangzhou': 'HGH',
+    'kyoto': 'KIX', 'nagoya': 'NGO', 'sapporo': 'CTS', 'fukuoka': 'FUK',
+    'busan': 'PUS', 'jeju': 'CJU',
   };
 
   // ─── SVG icon helper (DOM-based, avoids innerHTML for Trusted Types) ──
