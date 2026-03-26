@@ -259,7 +259,8 @@
 
         // Fetch price in background and update tooltip
         const pointsCost = parsePointsCost(cellText);
-        const cacheKey = `${origin}-${destination}-${date}-${cabin}-${airlineCode || 'any'}`;
+        const direct = isDirectOnly() ? 'nonstop' : 'any-stops';
+        const cacheKey = `${origin}-${destination}-${date}-${cabin}-${airlineCode || 'any'}-${direct}`;
         fetchPrice({ url, cacheKey, link, pointsCost, flightNumber, viewType });
       }
     }
@@ -286,10 +287,13 @@
   // ─── URL Change Detection ────────────────────────────────────
 
   let lastUrl = location.href;
+  let lastDirectOnly = isDirectOnly();
 
   function checkUrlChange() {
-    if (location.href !== lastUrl) {
+    const currentDirectOnly = isDirectOnly();
+    if (location.href !== lastUrl || currentDirectOnly !== lastDirectOnly) {
       lastUrl = location.href;
+      lastDirectOnly = currentDirectOnly;
       removeAllLinks();
       setTimeout(() => processTable(), 500);
     }
@@ -318,9 +322,10 @@
     setTimeout(() => processTable(), 1000);
     setupObserver();
 
-    // Periodic re-check for filter/sort/pagination changes
+    // Periodic re-check for filter/sort/pagination/URL changes
     const intervalId = setInterval(() => {
       if (!isContextValid()) { contextValid = false; clearInterval(intervalId); return; }
+      checkUrlChange();
       processTable();
     }, 2000);
   }
