@@ -104,7 +104,7 @@ async function doFetch(url, cacheKey) {
       const priceData = extractPrices(html);
       const result = {
         flightPrices: priceData?.flightPrices || {},
-        price: priceData?.lowest || null,
+        price: priceData?.price || null,
         error: null,
       };
 
@@ -155,7 +155,9 @@ function extractPrices(html) {
   let m;
   while ((m = flightRe.exec(content)) !== null) {
     const flightCode = m[1] + m[2];
-    const afterFlight = content.substring(m.index, m.index + 800);
+    // 1500 chars covers multi-segment itineraries (2-3 segments + route
+    // summary before the price). 800 was too short for connecting flights.
+    const afterFlight = content.substring(m.index, m.index + 1500);
     const priceMatch = afterFlight.match(/\[\[null,(\d+)\],"Cj/);
     if (priceMatch) {
       const p = parseInt(priceMatch[1]);
@@ -163,13 +165,17 @@ function extractPrices(html) {
     }
   }
 
-  // Also extract overall lowest price as fallback
-  let lowest = null;
-  const priceRe = /\[null,(\d+)\],"Cj/g;
+  // Use the first price in the data as the "best" price — Google Flights
+  // orders itineraries by its "Best" ranking, so the first price matches
+  // the top result users see by default (not the absolute cheapest).
+  let bestPrice = null;
+  const priceRe = /\[\[?null,(\d+)\],"Cj/g;
   while ((m = priceRe.exec(content)) !== null) {
     const p = parseInt(m[1]);
-    if (p > 0 && p < 50000 && (lowest === null || p < lowest)) lowest = p;
+    if (p > 0 && p < 50000) {
+      if (bestPrice === null) bestPrice = p;
+    }
   }
 
-  return { flightPrices, lowest };
+  return { flightPrices, price: bestPrice };
 }

@@ -54,10 +54,13 @@
   }
 
   function parseFlightInfo(flightsText) {
-    if (!flightsText) return { airlineCode: null, flightNumber: null };
+    if (!flightsText) return { airlineCode: null, flightNumber: null, allFlightNumbers: [], isConnection: false };
+    // Extract all flight numbers (e.g., "OZ223, OZ713" → ["OZ223", "OZ713"])
+    const allFlights = flightsText.match(/[A-Z\d]{2}\d+/g) || [];
+    const isConnection = allFlights.length > 1;
     const match = flightsText.match(/([A-Z\d]{2})(\d+)/);
-    if (!match) return { airlineCode: null, flightNumber: null };
-    return { airlineCode: match[1], flightNumber: match[1] + match[2] };
+    if (!match) return { airlineCode: null, flightNumber: null, allFlightNumbers: [], isConnection: false };
+    return { airlineCode: match[1], flightNumber: match[1] + match[2], allFlightNumbers: allFlights, isConnection };
   }
 
   // ─── DOM Parsing ──────────────────────────────────────────────
@@ -126,7 +129,7 @@
 
   // ─── Price Fetching ──────────────────────────────────────────
 
-  function fetchPrice({ url, cacheKey, link, pointsCost, flightNumber, viewType }) {
+  function fetchPrice({ url, cacheKey, link, pointsCost, flightNumber, allFlightNumbers, viewType }) {
     try {
       chrome.runtime.sendMessage(
         { action: 'fetchGoogleFlightsPrice', url, cacheKey },
@@ -137,8 +140,15 @@
             link.title = 'Price unavailable — click to view on Google Flights';
             return;
           }
-          // Use per-flight price if available, otherwise fall back to lowest
-          const price = (flightNumber && response.flightPrices?.[flightNumber]) || response.price;
+          // Try matching per-flight price: first the primary flight number,
+          // then any segment in a multi-segment itinerary.
+          let price = flightNumber && response.flightPrices?.[flightNumber];
+          if (!price && allFlightNumbers?.length > 1) {
+            for (const fn of allFlightNumbers) {
+              if (response.flightPrices?.[fn]) { price = response.flightPrices[fn]; break; }
+            }
+          }
+          if (!price) price = response.price;
           if (price === null || price === undefined) {
             link.textContent = '✈';
             link.classList.add('gf-no-price');
@@ -216,7 +226,7 @@
 
     for (const row of rows) {
 
-      let origin, destination, date, airlineCode, flightNumber;
+      let origin, destination, date, airlineCode, flightNumber, allFlightNumbers = [], isConnection = false;
 
       if (viewType === 'individual') {
         origin = extractCellText(row, cols.origin) || urlParams.origin;
@@ -225,7 +235,7 @@
         const departsText = extractCellText(row, cols.departs);
         date = parseDepartureDate(departsText, urlDate);
         const flightsText = extractCellText(row, cols.flights);
-        ({ airlineCode, flightNumber } = parseFlightInfo(flightsText));
+        ({ airlineCode, flightNumber, allFlightNumbers, isConnection } = parseFlightInfo(flightsText));
       } else {
         // Program Summary: has Date column, origin/dest from Departs/Arrives or URL
         date = extractCellText(row, cols.date) || '';
@@ -261,7 +271,10 @@
         const pointsCost = parsePointsCost(cellText);
         const direct = isDirectOnly() ? 'nonstop' : 'any-stops';
         const cacheKey = `${origin}-${destination}-${date}-${cabin}-${airlineCode || 'any'}-${direct}`;
-        fetchPrice({ url, cacheKey, link, pointsCost, flightNumber, viewType });
+        // Connecting flights: show "from $X" (no CPP) since the exact
+        // itinerary may differ between seats.aero and Google Flights.
+        const effectiveViewType = isConnection ? 'summary' : viewType;
+        fetchPrice({ url, cacheKey, link, pointsCost, flightNumber, allFlightNumbers, viewType: effectiveViewType });
       }
     }
   }
