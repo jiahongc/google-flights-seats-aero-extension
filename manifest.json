@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Seats.aero for Google Flights",
-  "version": "1.2.0",
+  "version": "1.4.0",
   "description": "Search award flight availability on seats.aero directly from Google Flights",
   "permissions": ["activeTab", "storage"],
   "host_permissions": [
     "*://www.google.com/travel/flights/*",
-    "*://seats.aero/*"
+    "*://seats.aero/*",
+    "*://api.frankfurter.dev/*"
   ],
   "action": {
     "default_popup": "popup.html",

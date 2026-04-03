@@ -239,12 +239,20 @@
   }
 
   function getTripType() {
+    // Check the trip type selector (dropdown at top of search form)
     const el = document.querySelector('[aria-label*="ticket type"], [aria-label*="Trip type"]');
     if (el) {
       const text = (el.textContent || el.getAttribute('aria-label') || '').toLowerCase();
-      if (text.includes('round trip')) return 'round-trip';
+      // Check multi-city FIRST — it's the most specific and shouldn't fall through
       if (text.includes('multi-city') || text.includes('multi city')) return 'multi-city';
+      if (text.includes('round trip')) return 'round-trip';
       if (text.includes('one way')) return 'one-way';
+    }
+    // Fallback: look for visible "Multi-city" text in the trip type area
+    const allButtons = document.querySelectorAll('[role="button"], button');
+    for (const btn of allButtons) {
+      const text = (btn.textContent || '').trim().toLowerCase();
+      if (text === 'multi-city' || text === 'multi city') return 'multi-city';
     }
     const returnInput = findInput('Return');
     return returnInput ? 'round-trip' : 'one-way';
@@ -394,7 +402,91 @@
 
   // ─── Global button (extract all page-level params) ───────────────
 
+  function extractMultiCityLegs() {
+    const legs = [];
+
+    // Strategy 1: Use leg row containers (.PTNZsf) with sub-containers
+    const legRows = document.querySelectorAll('.PTNZsf');
+    if (legRows.length > 1) {
+      for (const row of legRows) {
+        const originInput = row.querySelector('.BGeFcf input[role="combobox"]')
+          || row.querySelector('.BGeFcf input[aria-label*="Where from"]');
+        const destInput = row.querySelector('.vxNK6d input[role="combobox"]')
+          || row.querySelector('.vxNK6d input[aria-label*="Where to"]');
+        const dateDataEl = row.querySelector('.icWGef [data-value]');
+        const dateInput = row.querySelector('input[aria-label="Departure"]');
+
+        const originText = (originInput?.value || '').trim();
+        const destText = (destInput?.value || '').trim();
+        const dateIso = dateDataEl?.getAttribute('data-value') || '';
+        const dateText = (dateInput?.value || '').trim();
+
+        if (!originText || !destText) continue;
+
+        const origin = resolveAirportCode(originText, true);
+        const dest = resolveAirportCode(destText, false);
+        const date = dateIso || parseDate(dateText);
+        if (origin && dest && date) {
+          legs.push({ origin, destination: dest, date, originText, destText, dateText: dateText || dateIso });
+        }
+      }
+      if (legs.length > 1) return legs;
+    }
+
+    // Strategy 2 (fallback): collect visible from/to/departure inputs by index
+    const allInputs = document.querySelectorAll('input[aria-label]');
+    const fromInputs = [];
+    const toInputs = [];
+    const departureInputs = [];
+    for (const input of allInputs) {
+      if (input.offsetParent === null) continue;
+      const label = (input.getAttribute('aria-label') || '').toLowerCase().trim();
+      if (label.startsWith('where from')) fromInputs.push(input);
+      else if (label.startsWith('where to')) toInputs.push(input);
+      else if (label === 'departure') departureInputs.push(input);
+    }
+
+    const legCount = Math.min(fromInputs.length, toInputs.length, departureInputs.length);
+    if (legCount <= 1) return null;
+
+    for (let i = 0; i < legCount; i++) {
+      const originText = (fromInputs[i].value || '').trim();
+      const destText = (toInputs[i].value || '').trim();
+      const dateText = (departureInputs[i].value || '').trim();
+      if (!originText || !destText || !dateText) continue;
+
+      const origin = resolveAirportCode(originText, true);
+      const dest = resolveAirportCode(destText, false);
+      const date = parseDate(dateText);
+      if (origin && dest && date) {
+        legs.push({ origin, destination: dest, date, originText, destText, dateText });
+      }
+    }
+
+    return legs.length > 1 ? legs : null;
+  }
+
   function extractGlobalParams() {
+    const tripType = getTripType();
+    const cabin = getCabinClass();
+    const directOnly = isNonstopFilterActive();
+    const passengers = getPassengerCount();
+    const flexDays = settings.flexibleDaysNum || 0;
+    const airlines = getSelectedAirlines();
+    const baseParams = { cabin, directOnly, airlines, passengers, flexibleDays: flexDays };
+
+    // Multi-city: detect by multiple leg rows OR trip type label
+    const multiLegs = (tripType === 'multi-city' || document.querySelectorAll('.PTNZsf').length > 1)
+      ? extractMultiCityLegs() : null;
+    if (multiLegs && multiLegs.length > 0) {
+      const legs = multiLegs.map(leg => ({
+        label: `${leg.origin} → ${leg.destination} · ${leg.dateText}`,
+        url: buildSeatsAeroUrl({ origins: leg.origin, destinations: leg.destination, date: leg.date, ...baseParams }),
+      }));
+      return { legs, error: null };
+    }
+
+    // One-way and round-trip
     let originText = getFieldValue('Where from');
     let destText = getFieldValue('Where to');
     const departureDateText = getFieldValue('Departure');
@@ -412,53 +504,118 @@
     const destinations = resolveAirportCode(destText, false);
     const departureDate = parseDate(departureDateText);
 
-    if (!origins) return { urls: [], error: 'Could not determine origin airport' };
-    if (!destinations) return { urls: [], error: 'Could not determine destination airport' };
-    if (!departureDate) return { urls: [], error: 'Could not determine departure date' };
+    if (!origins) return { legs: [], error: 'Could not determine origin airport' };
+    if (!destinations) return { legs: [], error: 'Could not determine destination airport' };
+    if (!departureDate) return { legs: [], error: 'Could not determine departure date' };
 
-    const tripType = getTripType();
-    const cabin = getCabinClass();
-    const directOnly = isNonstopFilterActive();
-    const passengers = getPassengerCount();
-    const flexDays = settings.flexibleDaysNum || 0;
-
-    const airlines = getSelectedAirlines();
-    const baseParams = { cabin, directOnly, airlines, passengers, flexibleDays: flexDays };
-    const urls = [];
-
-    urls.push(buildSeatsAeroUrl({ origins, destinations, date: departureDate, ...baseParams }));
+    const legs = [{
+      label: `${origins} → ${destinations} · ${departureDateText || departureDate}`,
+      url: buildSeatsAeroUrl({ origins, destinations, date: departureDate, ...baseParams }),
+    }];
 
     if (tripType === 'round-trip' && returnDateText) {
       const returnDate = parseDate(returnDateText);
       if (returnDate) {
-        urls.push(buildSeatsAeroUrl({ origins: destinations, destinations: origins, date: returnDate, ...baseParams }));
+        legs.push({
+          label: `${destinations} → ${origins} · ${returnDateText || returnDate}`,
+          url: buildSeatsAeroUrl({ origins: destinations, destinations: origins, date: returnDate, ...baseParams }),
+        });
       }
     }
 
-    return { urls, error: null };
+    return { legs, error: null };
+  }
+
+  function dismissDropdown() {
+    const existing = document.querySelector('.seats-aero-dropdown');
+    if (existing) existing.remove();
+    document.removeEventListener('click', handleOutsideClick, true);
+  }
+
+  function handleOutsideClick(e) {
+    const dropdown = document.querySelector('.seats-aero-dropdown');
+    const btn = document.getElementById(BUTTON_ID);
+    if (dropdown && !dropdown.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+      dismissDropdown();
+    }
+  }
+
+  function showLegDropdown(btn, legs) {
+    dismissDropdown();
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'seats-aero-dropdown';
+
+    // Individual leg options
+    legs.forEach((leg) => {
+      const item = document.createElement('button');
+      item.className = 'seats-aero-dropdown-item';
+      item.textContent = leg.label;
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dismissDropdown();
+        openSeatsAero([leg.url]);
+      });
+      dropdown.appendChild(item);
+    });
+
+    // "All legs" option with separator
+    const allItem = document.createElement('button');
+    allItem.className = 'seats-aero-dropdown-item seats-aero-dropdown-sep';
+    const allLabel = legs.length === 2 ? 'Both legs' : `All ${legs.length} legs`;
+    allItem.textContent = `${allLabel} (opens ${legs.length} tabs)`;
+    allItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dismissDropdown();
+      openSeatsAero(legs.map(l => l.url));
+    });
+    dropdown.appendChild(allItem);
+
+    btn.appendChild(dropdown);
+
+    // Dismiss on outside click (delayed to avoid catching the current click)
+    setTimeout(() => document.addEventListener('click', handleOutsideClick, true), 0);
+  }
+
+  function showButtonError(btn, error) {
+    btn.classList.add('seats-aero-error');
+    while (btn.firstChild) btn.removeChild(btn.firstChild);
+    btn.appendChild(document.createTextNode('⚠ ' + error));
+    btn.title = error;
+    setTimeout(() => {
+      btn.classList.remove('seats-aero-error');
+      while (btn.firstChild) btn.removeChild(btn.firstChild);
+      btn.appendChild(createPlaneIcon(16));
+      btn.appendChild(document.createTextNode(' Search on seats.aero'));
+      btn.title = 'Search this route on seats.aero for award availability';
+    }, 5000);
   }
 
   function handleGlobalButtonClick(e) {
     e.preventDefault();
     e.stopPropagation();
     const btn = document.getElementById(BUTTON_ID);
-    const { urls, error } = extractGlobalParams();
-    if (error) {
-      // Show visible error on the button
-      btn.classList.add('seats-aero-error');
-      while (btn.firstChild) btn.removeChild(btn.firstChild);
-      btn.appendChild(document.createTextNode('⚠ ' + error));
-      btn.title = error;
-      setTimeout(() => {
-        btn.classList.remove('seats-aero-error');
-        while (btn.firstChild) btn.removeChild(btn.firstChild);
-        btn.appendChild(createPlaneIcon(16));
-        btn.appendChild(document.createTextNode(' Search on seats.aero'));
-        btn.title = 'Search this route on seats.aero for award availability';
-      }, 5000);
+
+    // If dropdown is already open, dismiss it
+    if (btn.querySelector('.seats-aero-dropdown')) {
+      dismissDropdown();
       return;
     }
-    openSeatsAero(urls);
+
+    const { legs, error } = extractGlobalParams();
+    if (error) {
+      showButtonError(btn, error);
+      return;
+    }
+
+    // One-way: open directly, no dropdown
+    if (legs.length === 1) {
+      openSeatsAero([legs[0].url]);
+      return;
+    }
+
+    // Round-trip / multi-city: show leg selector
+    showLegDropdown(btn, legs);
   }
 
   // ─── Global button injection ─────────────────────────────────────
@@ -519,11 +676,8 @@
   function updateGlobalButtonState() {
     const btn = document.getElementById(BUTTON_ID);
     if (!btn) return;
-    const tripType = getTripType();
-    if (tripType === 'multi-city') {
-      btn.disabled = true;
-      btn.title = 'Multi-city searches are not supported on seats.aero';
-    }
+    btn.disabled = false;
+    btn.title = 'Search this route on seats.aero for award availability';
   }
 
   // ─── Main injection orchestrator ─────────────────────────────────
@@ -536,6 +690,7 @@
   }
 
   function removeAll() {
+    dismissDropdown();
     const globalBtn = document.getElementById(BUTTON_ID);
     if (globalBtn) globalBtn.remove();
   }
