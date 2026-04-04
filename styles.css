@@ -56,6 +56,61 @@
   box-shadow: none;
 }
 
+/* ── Leg selector dropdown ── */
+
+.seats-aero-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: white;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  z-index: 10000;
+  min-width: 240px;
+  overflow: hidden;
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  font-size: 13px;
+}
+
+.seats-aero-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: #202124;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.seats-aero-dropdown-item:hover {
+  background-color: #f1f3f4;
+}
+
+.seats-aero-dropdown-item:active {
+  background-color: #e8eaed;
+}
+
+.seats-aero-dropdown-sep {
+  border-top: 1px solid #e8eaed;
+}
+
+.seats-aero-dropdown-item .seats-aero-item-hint {
+  color: #5f6368;
+  font-size: 12px;
+}
+
+/* Button needs relative positioning for dropdown */
+.seats-aero-search-btn {
+  position: relative;
+}
+
 /* ── Visibility toggle ── */
 
 body.seats-aero-hide-global #seats-aero-btn {

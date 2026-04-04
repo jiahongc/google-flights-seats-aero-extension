@@ -634,35 +634,22 @@
   function injectGlobalButton() {
     if (document.getElementById(BUTTON_ID)) return;
 
-    // Strategy 1: Next to "All filters" button
-    const allFiltersBtn = document.querySelector('[aria-label*="All filters"]');
-    if (allFiltersBtn) {
-      const filterBar = allFiltersBtn.parentElement;
-      if (filterBar) {
-        filterBar.appendChild(createGlobalButton());
-        updateGlobalButtonState();
-        return;
-      }
+    // Strategy 1: Above the search form (role="search")
+    // Stable, always visible, won't get clipped by the scrolling filter bar
+    const searchForm = document.querySelector('[role="search"]');
+    if (searchForm) {
+      const btn = createGlobalButton();
+      btn.style.margin = '0 0 8px auto';
+      btn.style.display = 'flex';
+      searchForm.parentElement.insertBefore(btn, searchForm);
+      updateGlobalButtonState();
+      return;
     }
 
-    // Strategy 2: Near filter buttons (Stops, Airlines, etc.)
-    const allButtons = document.querySelectorAll('button');
-    for (const fb of allButtons) {
-      const text = fb.textContent.trim();
-      if (text === 'Stops' || text === 'Airlines' || text === 'Duration') {
-        const container = fb.parentElement;
-        if (container && !container.querySelector(`#${BUTTON_ID}`)) {
-          container.parentElement.appendChild(createGlobalButton());
-          updateGlobalButtonState();
-          return;
-        }
-      }
-    }
-
-    // Strategy 3: Above results heading
+    // Strategy 2: Above the first results heading
     const headings = document.querySelectorAll('h3');
     for (const h of headings) {
-      if ((h.textContent || '').includes('flights')) {
+      if ((h.textContent || '').toLowerCase().includes('flights')) {
         const btn = createGlobalButton();
         btn.style.margin = '8px 24px';
         btn.style.display = 'flex';
@@ -698,7 +685,11 @@
   // ─── Page detection & SPA navigation ─────────────────────────────
 
   function isResultsPage() {
-    return location.href.includes(SEARCH_PATH);
+    if (location.href.includes(SEARCH_PATH)) return true;
+    // Google Travel Explore navigates to /travel/flights?tfs=... (no /search)
+    // which still shows flight results
+    if (location.pathname === '/travel/flights' && new URL(location.href).searchParams.has('tfs')) return true;
+    return false;
   }
 
   let lastUrl = location.href;
@@ -766,6 +757,10 @@
     const navIntervalId = setInterval(() => {
       if (!isContextValid()) { contextValid = false; clearInterval(navIntervalId); return; }
       checkForNavigation();
+      // Retry injection if button is missing (e.g., h3 wasn't rendered on first attempt)
+      if (isResultsPage() && !document.getElementById(BUTTON_ID)) {
+        injectAll();
+      }
     }, 1000);
     setupMutationObserver();
   }

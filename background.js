@@ -20,6 +20,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handlePriceFetch(message.url, message.cacheKey).then(sendResponse);
     return true;
   }
+
+  if (message.action === 'getExchangeRates') {
+    getExchangeRates().then(sendResponse);
+    return true;
+  }
 });
 
 // ─── Google Flights Price Fetching ──────────────────────────────
@@ -178,4 +183,53 @@ function extractPrices(html) {
   }
 
   return { flightPrices, price: bestPrice };
+}
+
+// ─── Exchange Rates (frankfurter.dev, ECB data) ──────────────────
+
+const RATES_TTL = 6 * 60 * 60 * 1000; // 6 hours
+let cachedRates = null;
+let ratesFetchedAt = 0;
+let ratesInflight = null;
+
+// Fallback rates in case the API is unreachable
+const FALLBACK_RATES = { EUR: 1.08, GBP: 1.27, CAD: 0.74, AUD: 0.66, JPY: 0.0067 };
+
+async function getExchangeRates() {
+  if (cachedRates && (Date.now() - ratesFetchedAt < RATES_TTL)) {
+    return cachedRates;
+  }
+  if (ratesInflight) return ratesInflight;
+
+  ratesInflight = fetchRates();
+  try {
+    const result = await ratesInflight;
+    return result;
+  } finally {
+    ratesInflight = null;
+  }
+}
+
+async function fetchRates() {
+  try {
+    const resp = await fetch(
+      'https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR,GBP,CAD,AUD,JPY',
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    // API returns how many foreign units per 1 USD (e.g., EUR: 0.92).
+    // We need the inverse: how many USD per 1 foreign unit.
+    const rates = {};
+    for (const [currency, perUsd] of Object.entries(data.rates)) {
+      rates[currency] = perUsd > 0 ? 1 / perUsd : 0;
+    }
+    cachedRates = rates;
+    ratesFetchedAt = Date.now();
+    return rates;
+  } catch (e) {
+    // Use fallback if API fails; don't cache fallback so we retry next time
+    if (cachedRates) return cachedRates;
+    return FALLBACK_RATES;
+  }
 }

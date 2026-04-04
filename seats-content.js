@@ -129,7 +129,7 @@
 
   // ─── Price Fetching ──────────────────────────────────────────
 
-  function fetchPrice({ url, cacheKey, link, pointsCost, flightNumber, allFlightNumbers, viewType }) {
+  function fetchPrice({ url, cacheKey, link, pointsCost, fees, flightNumber, allFlightNumbers, viewType }) {
     try {
       chrome.runtime.sendMessage(
         { action: 'fetchGoogleFlightsPrice', url, cacheKey },
@@ -164,10 +164,17 @@
             link.classList.add('gf-price-only');
           } else {
             // Individual Flights: exact flight match, show price + CPP
-            const cppVal = pointsCost > 0 ? (price * 100 / pointsCost) : 0;
+            // Subtract taxes/fees (converted to USD) from cash price before
+            // calculating CPP — fees are paid out of pocket regardless.
+            const feesUSD = fees?.amountUSD || 0;
+            const adjustedPrice = Math.max(price - feesUSD, 0);
+            const cppVal = pointsCost > 0 ? (adjustedPrice * 100 / pointsCost) : 0;
             const cppStr = cppVal.toFixed(2);
+            const feesNote = feesUSD > 0
+              ? ` (after ${fees.currency}${fees.amount.toLocaleString()} fees ≈ $${Math.round(feesUSD).toLocaleString()})`
+              : '';
             link.textContent = `$${price.toLocaleString()} · ${cppStr}cpp`;
-            link.title = `Cash price: $${price.toLocaleString()} | ${cppStr} cents per point`;
+            link.title = `Cash price: $${price.toLocaleString()} | ${cppStr} cents per point${feesNote}`;
             link.dataset.cpp = cppStr;
             if (cppVal >= 2.0) {
               link.classList.add('gf-cpp-good');
@@ -196,6 +203,37 @@
     return parseInt(match[1].replace(/,/g, ''));
   }
 
+  // Currency symbol → ISO code mapping
+  const SYMBOL_TO_ISO = { '€': 'EUR', '£': 'GBP', 'C$': 'CAD', 'A$': 'AUD', '¥': 'JPY' };
+  let exchangeRatesLoaded = false;
+  // Start with approximate rates; replaced with live rates from background
+  let exchangeRates = { EUR: 1.08, GBP: 1.27, CAD: 0.74, AUD: 0.66, JPY: 0.0067 };
+
+  function loadExchangeRates() {
+    try {
+      chrome.runtime.sendMessage({ action: 'getExchangeRates' }, (rates) => {
+        if (chrome.runtime.lastError || !rates) return;
+        exchangeRates = rates;
+        exchangeRatesLoaded = true;
+      });
+    } catch (e) { /* context invalidated */ }
+  }
+
+  // Fetch rates on load
+  loadExchangeRates();
+
+  function parseFees(cellText) {
+    // Extract fees like "+ €1,222.74", "+ $500", "+ £300", "+ ¥15,000"
+    const match = cellText.match(/\+\s*(C\$|A\$|[€£¥$])\s*([\d,]+(?:\.\d{1,2})?)/);
+    if (!match) return { amount: 0, currency: '$', amountUSD: 0 };
+    const currency = match[1];
+    const amount = parseFloat(match[2].replace(/,/g, ''));
+    if (currency === '$') return { amount, currency, amountUSD: amount };
+    const iso = SYMBOL_TO_ISO[currency];
+    const rate = (iso && exchangeRates[iso]) || 1;
+    return { amount, currency, amountUSD: amount * rate };
+  }
+
   // ─── Link Creation ────────────────────────────────────────────
 
   function createGFLink(url) {
@@ -213,6 +251,8 @@
 
   function processTable() {
     if (!contextValid && !isContextValid()) return;
+    // Retry exchange rate fetch if the initial load failed (cold service worker)
+    if (!exchangeRatesLoaded) loadExchangeRates();
     const table = findResultsTable();
     if (!table) return;
 
@@ -269,12 +309,13 @@
 
         // Fetch price in background and update tooltip
         const pointsCost = parsePointsCost(cellText);
+        const fees = parseFees(cellText);
         const direct = isDirectOnly() ? 'nonstop' : 'any-stops';
         const cacheKey = `${origin}-${destination}-${date}-${cabin}-${airlineCode || 'any'}-${direct}`;
         // Connecting flights: show "from $X" (no CPP) since the exact
         // itinerary may differ between seats.aero and Google Flights.
         const effectiveViewType = isConnection ? 'summary' : viewType;
-        fetchPrice({ url, cacheKey, link, pointsCost, flightNumber, allFlightNumbers, viewType: effectiveViewType });
+        fetchPrice({ url, cacheKey, link, pointsCost, fees, flightNumber, allFlightNumbers, viewType: effectiveViewType });
       }
     }
   }
