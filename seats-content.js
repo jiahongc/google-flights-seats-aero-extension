@@ -34,12 +34,34 @@
     } catch (e) { return false; }
   }
 
-  function buildGoogleFlightsUrl(origin, destination, date, cabin, airlineCode) {
+  function buildGoogleFlightsUrl(origin, destination, date, cabin, airlineCode, nonstop) {
     const seat = SEAT_MAP[cabin] || 1;
     const airlines = airlineCode ? [airlineCode] : [];
-    const nonstop = isDirectOnly();
     // buildGoogleFlightsTfsUrl is defined in protobuf.js (loaded before this script)
     return buildGoogleFlightsTfsUrl(origin, destination, date, seat, airlines, nonstop);
+  }
+
+  /**
+   * Detect whether a cell's badge indicates a direct (green) or connecting (blue) flight.
+   * On seats.aero, green badges = direct/nonstop, blue badges = connecting.
+   * Returns true if the badge is green (direct), false otherwise.
+   */
+  function isCellDirect(cell, globalDirect) {
+    if (globalDirect) return true;
+    // Look for the badge element (typically a span with background-color)
+    const badges = cell.querySelectorAll('span, .badge, [class*="badge"]');
+    for (const badge of badges) {
+      const bg = getComputedStyle(badge).backgroundColor;
+      if (!bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') continue;
+      const rgb = bg.match(/\d+/g);
+      if (!rgb || rgb.length < 3) continue;
+      const [r, g, b] = rgb.map(Number);
+      // Green badges: high green, lower red/blue → direct/nonstop
+      if (g > 100 && g > r && g > b) return true;
+      // Blue badges: high blue, lower red/green → connecting
+      if (b > 100 && b > r && b > g) return false;
+    }
+    return globalDirect;
   }
 
   function parseDepartureDate(departsText, fallbackDate) {
@@ -118,18 +140,11 @@
     return cells[index]?.textContent?.trim() || null;
   }
 
-  function getOriginDestFromUrl() {
-    // Fallback: extract from URL params
-    const url = new URL(location.href);
-    return {
-      origin: url.searchParams.get('origins') || '',
-      destination: url.searchParams.get('destinations') || '',
-    };
-  }
+  // getOriginDestFromUrl inlined into processTable to share a single URL parse
 
   // ─── Price Fetching ──────────────────────────────────────────
 
-  function fetchPrice({ url, cacheKey, link, pointsCost, fees, flightNumber, allFlightNumbers, viewType }) {
+  function fetchPrice({ url, cacheKey, link, pointsCost, fees, flightNumber, allFlightNumbers, viewType, isDirect }) {
     try {
       chrome.runtime.sendMessage(
         { action: 'fetchGoogleFlightsPrice', url, cacheKey },
@@ -157,11 +172,20 @@
           }
 
           if (viewType === 'summary') {
-            // Program Summary: points may not correspond to the same flight as the
-            // cash price, so show only the price as a reference — no CPP.
-            link.textContent = `from $${price.toLocaleString()}`;
-            link.title = `Lowest cash price on this route/date: $${price.toLocaleString()}`;
-            link.classList.add('gf-price-only');
+            // Differentiate direct vs connecting prices for clarity
+            if (isDirect) {
+              link.textContent = `direct $${price.toLocaleString()}+`;
+              const cppApprox = pointsCost > 0 ? (price * 100 / pointsCost).toFixed(1) : null;
+              const cppNote = cppApprox ? ` | ~${cppApprox}cpp` : '';
+              link.title = `Nonstop cash price from $${price.toLocaleString()}${cppNote}`;
+              link.classList.add('gf-price-only', 'gf-direct');
+            } else {
+              // Connecting flights in Individual Flights view —
+              // show price without CPP (exact itinerary may differ)
+              link.textContent = `from $${price.toLocaleString()}`;
+              link.title = `Cash price from $${price.toLocaleString()}`;
+              link.classList.add('gf-price-only');
+            }
           } else {
             // Individual Flights: exact flight match, show price + CPP
             // Subtract taxes/fees (converted to USD) from cash price before
@@ -254,69 +278,78 @@
     // Retry exchange rate fetch if the initial load failed (cold service worker)
     if (!exchangeRatesLoaded) loadExchangeRates();
     const table = findResultsTable();
-    if (!table) return;
+    if (!table) { console.debug('[seats-gf] No results table found'); return; }
 
     const viewType = detectViewType(table);
     const cols = getColumnIndices(table);
     const rows = table.querySelectorAll('tbody tr');
     if (rows.length === 0) return;
 
-    const urlParams = getOriginDestFromUrl();
-    const urlDate = new URL(location.href).searchParams.get('date') || '';
+    // Parse URL once for all rows
+    const parsedUrl = new URL(location.href);
+    const urlParams = {
+      origin: parsedUrl.searchParams.get('origins') || '',
+      destination: parsedUrl.searchParams.get('destinations') || '',
+    };
+    const urlDate = parsedUrl.searchParams.get('date') || '';
+    const globalDirect = parsedUrl.searchParams.get('direct_only') === 'true';
 
     for (const row of rows) {
-
+      try {
       let origin, destination, date, airlineCode, flightNumber, allFlightNumbers = [], isConnection = false;
 
       if (viewType === 'individual') {
         origin = extractCellText(row, cols.origin) || urlParams.origin;
         destination = extractCellText(row, cols.destination) || urlParams.destination;
-        // Extract actual departure date from Departs column (e.g., "11/06 10:55PM")
         const departsText = extractCellText(row, cols.departs);
         date = parseDepartureDate(departsText, urlDate);
         const flightsText = extractCellText(row, cols.flights);
         ({ airlineCode, flightNumber, allFlightNumbers, isConnection } = parseFlightInfo(flightsText));
       } else {
-        // Program Summary: has Date column, origin/dest from Departs/Arrives or URL
         date = extractCellText(row, cols.date) || '';
         origin = extractCellText(row, cols.origin) || urlParams.origin;
         destination = extractCellText(row, cols.destination) || urlParams.destination;
-        airlineCode = null; // Program Summary doesn't have a specific airline per row
+        airlineCode = null;
       }
 
       if (!origin || !destination) continue;
 
-      // Process each cabin column
       const cabins = ['economy', 'premium', 'business', 'first'];
+      const cells = row.querySelectorAll('td');
       for (const cabin of cabins) {
         const colIndex = cols[cabin];
-        if (colIndex === undefined) continue;
-
-        const cells = row.querySelectorAll('td');
-        if (colIndex >= cells.length) continue;
+        if (colIndex === undefined || colIndex >= cells.length) continue;
         const cell = cells[colIndex];
         const cellText = cell.textContent.trim();
 
-        // Skip "Not Available" cells
         if (cellText.toLowerCase().includes('not available') || cellText === '' || cellText === '-') continue;
-
-        // Skip if link already injected in this cell
         if (cell.querySelector('.' + LINK_CLASS)) continue;
 
-        const url = buildGoogleFlightsUrl(origin, destination, date, cabin, airlineCode);
+        // Green badge = direct/nonstop, blue badge = connecting
+        const cellDirect = isCellDirect(cell, globalDirect);
+
+        const url = buildGoogleFlightsUrl(origin, destination, date, cabin, airlineCode, cellDirect);
         const link = createGFLink(url);
         cell.appendChild(link);
 
-        // Fetch price in background and update tooltip
+        // Non-direct in summary view: just show clickable link, no price fetch
+        // (Google Flights has no "connecting only" filter, so price would be misleading)
+        if (viewType === 'summary' && !cellDirect) {
+          link.textContent = 'non-direct ✈';
+          link.title = 'Click to view connecting flights on Google Flights';
+          link.classList.add('gf-price-only');
+          continue;
+        }
+
         const pointsCost = parsePointsCost(cellText);
         const fees = parseFees(cellText);
-        const direct = isDirectOnly() ? 'nonstop' : 'any-stops';
-        const cacheKey = `${origin}-${destination}-${date}-${cabin}-${airlineCode || 'any'}-${direct}`;
-        // Connecting flights: show "from $X" (no CPP) since the exact
-        // itinerary may differ between seats.aero and Google Flights.
-        const effectiveViewType = isConnection ? 'summary' : viewType;
-        fetchPrice({ url, cacheKey, link, pointsCost, fees, flightNumber, allFlightNumbers, viewType: effectiveViewType });
+        const directLabel = cellDirect ? 'nonstop' : 'any-stops';
+        const cacheKey = `${origin}-${destination}-${date}-${cabin}-${airlineCode || 'any'}-${directLabel}`;
+        const cellIsConnection = !cellDirect || isConnection;
+        const effectiveViewType = cellIsConnection ? 'summary' : viewType;
+        fetchPrice({ url, cacheKey, link, pointsCost, fees, flightNumber, allFlightNumbers, viewType: effectiveViewType, isDirect: cellDirect });
       }
+      } catch (e) { console.warn('[seats-gf] Error processing row:', e); }
     }
   }
 

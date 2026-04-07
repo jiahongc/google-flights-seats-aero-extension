@@ -39,6 +39,11 @@
   font-style: italic;
 }
 
+.gf-link.gf-direct {
+  color: #137333;
+  font-style: normal;
+}
+
 .gf-link.gf-cpp-good {
   background-color: #e6f4ea;
   color: #137333;
