@@ -322,7 +322,8 @@
         const cell = cells[colIndex];
         const cellText = cell.textContent.trim();
 
-        if (cellText.toLowerCase().includes('not available') || cellText === '' || cellText === '-') continue;
+        const notAvailable = cellText.toLowerCase().includes('not available') || cellText === '' || cellText === '-';
+        if (notAvailable && viewType !== 'individual') continue;
         if (cell.querySelector('.' + LINK_CLASS)) continue;
 
         // Green badge = direct/nonstop, blue badge = connecting
@@ -346,7 +347,7 @@
         const directLabel = cellDirect ? 'nonstop' : 'any-stops';
         const cacheKey = `${origin}-${destination}-${date}-${cabin}-${airlineCode || 'any'}-${directLabel}`;
         const cellIsConnection = !cellDirect || isConnection;
-        const effectiveViewType = cellIsConnection ? 'summary' : viewType;
+        const effectiveViewType = (notAvailable || cellIsConnection) ? 'summary' : viewType;
         fetchPrice({ url, cacheKey, link, pointsCost, fees, flightNumber, allFlightNumbers, viewType: effectiveViewType, isDirect: cellDirect });
       }
       } catch (e) { console.warn('[seats-gf] Error processing row:', e); }
