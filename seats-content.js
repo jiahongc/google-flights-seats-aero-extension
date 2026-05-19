@@ -175,7 +175,9 @@
             // Differentiate direct vs connecting prices for clarity
             if (isDirect) {
               link.textContent = `direct $${price.toLocaleString()}+`;
-              const cppApprox = pointsCost > 0 ? (price * 100 / pointsCost).toFixed(1) : null;
+              const feesUSD = fees?.amountUSD || 0;
+              const adjustedPrice = Math.max(price - feesUSD, 0);
+              const cppApprox = pointsCost > 0 ? (adjustedPrice * 100 / pointsCost).toFixed(1) : null;
               const cppNote = cppApprox ? ` | ~${cppApprox}cpp` : '';
               link.title = `Nonstop cash price from $${price.toLocaleString()}${cppNote}`;
               link.classList.add('gf-price-only', 'gf-direct');
@@ -195,7 +197,7 @@
             const cppVal = pointsCost > 0 ? (adjustedPrice * 100 / pointsCost) : 0;
             const cppStr = cppVal.toFixed(2);
             const feesNote = feesUSD > 0
-              ? ` (after ${fees.currency}${fees.amount.toLocaleString()} fees ≈ $${Math.round(feesUSD).toLocaleString()})`
+              ? ` (after ${formatFeeAmount(fees)} fees ≈ $${Math.round(feesUSD).toLocaleString()})`
               : '';
             link.textContent = `$${price.toLocaleString()} · ${cppStr}cpp`;
             link.title = `Cash price: $${price.toLocaleString()} | ${cppStr} cents per point${feesNote}`;
@@ -228,7 +230,7 @@
   }
 
   // Currency symbol → ISO code mapping
-  const SYMBOL_TO_ISO = { '€': 'EUR', '£': 'GBP', 'C$': 'CAD', 'A$': 'AUD', '¥': 'JPY' };
+  const SYMBOL_TO_ISO = { '$': 'USD', 'US$': 'USD', '€': 'EUR', '£': 'GBP', 'C$': 'CAD', 'CA$': 'CAD', 'A$': 'AUD', 'AU$': 'AUD', '¥': 'JPY' };
   let exchangeRatesLoaded = false;
   // Start with approximate rates; replaced with live rates from background
   let exchangeRates = { EUR: 1.08, GBP: 1.27, CAD: 0.74, AUD: 0.66, JPY: 0.0067 };
@@ -246,16 +248,61 @@
   // Fetch rates on load
   loadExchangeRates();
 
-  function parseFees(cellText) {
-    // Extract fees like "+ €1,222.74", "+ $500", "+ £300", "+ ¥15,000"
-    const match = cellText.match(/\+\s*(C\$|A\$|[€£¥$])\s*([\d,]+(?:\.\d{1,2})?)/);
-    if (!match) return { amount: 0, currency: '$', amountUSD: 0 };
-    const currency = match[1];
-    const amount = parseFloat(match[2].replace(/,/g, ''));
-    if (currency === '$') return { amount, currency, amountUSD: amount };
-    const iso = SYMBOL_TO_ISO[currency];
-    const rate = (iso && exchangeRates[iso]) || 1;
-    return { amount, currency, amountUSD: amount * rate };
+  function getFeeSources(cell) {
+    if (!cell || typeof cell === 'string') return [cell || ''];
+    const attrs = ['title', 'aria-label', 'data-original-title', 'data-bs-original-title', 'data-tooltip', 'data-tippy-content'];
+    const sources = [cell.textContent || ''];
+    for (const el of [cell, ...cell.querySelectorAll('*')]) {
+      for (const attr of attrs) {
+        const value = el.getAttribute(attr);
+        if (value) sources.push(value);
+      }
+    }
+    return sources;
+  }
+
+  function feeAmountUSD(amount, currency, iso) {
+    const currencyIso = iso || SYMBOL_TO_ISO[currency];
+    if (!currencyIso || currencyIso === 'USD') return amount;
+    return amount * (exchangeRates[currencyIso] || 1);
+  }
+
+  function formatFeeAmount(fees) {
+    const amount = fees.amount.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    return /^[A-Z]{3}$/.test(fees.currency) ? `${fees.currency} ${amount}` : `${fees.currency}${amount}`;
+  }
+
+  function parseFees(cell) {
+    // Extract fees from visible text or tooltip attrs, e.g. "+ $92.75 USD", "+ €1,222.74", "+ USD 92.75".
+    const symbolRe = /\+\s*(US\$|CA\$|AU\$|C\$|A\$|[€£¥$])\s*([\d,]+(?:\.\d{1,2})?)\s*([A-Z]{3})?/i;
+    const isoBeforeRe = /\+\s*([A-Z]{3})\s*([\d,]+(?:\.\d{1,2})?)/i;
+    const amountBeforeIsoRe = /\+\s*([\d,]+(?:\.\d{1,2})?)\s*(USD|EUR|GBP|CAD|AUD|JPY)\b/i;
+
+    for (const source of getFeeSources(cell)) {
+      let match = source.match(symbolRe);
+      if (match) {
+        const currency = match[1];
+        const amount = parseFloat(match[2].replace(/,/g, ''));
+        const iso = match[3]?.toUpperCase();
+        return { amount, currency, iso, amountUSD: feeAmountUSD(amount, currency, iso) };
+      }
+
+      match = source.match(isoBeforeRe);
+      if (match) {
+        const currency = match[1].toUpperCase();
+        const amount = parseFloat(match[2].replace(/,/g, ''));
+        return { amount, currency, iso: currency, amountUSD: feeAmountUSD(amount, currency, currency) };
+      }
+
+      match = source.match(amountBeforeIsoRe);
+      if (match) {
+        const amount = parseFloat(match[1].replace(/,/g, ''));
+        const currency = match[2].toUpperCase();
+        return { amount, currency, iso: currency, amountUSD: feeAmountUSD(amount, currency, currency) };
+      }
+    }
+
+    return { amount: 0, currency: '$', iso: 'USD', amountUSD: 0 };
   }
 
   // ─── Link Creation ────────────────────────────────────────────
@@ -343,7 +390,7 @@
         }
 
         const pointsCost = parsePointsCost(cellText);
-        const fees = parseFees(cellText);
+        const fees = parseFees(cell);
         const directLabel = cellDirect ? 'nonstop' : 'any-stops';
         const cacheKey = `${origin}-${destination}-${date}-${cabin}-${airlineCode || 'any'}-${directLabel}`;
         const cellIsConnection = !cellDirect || isConnection;
