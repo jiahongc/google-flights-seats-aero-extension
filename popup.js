@@ -1,24 +1,28 @@
-const TOGGLE_KEYS = ['globalButton'];
-const TOGGLE_DEFAULTS = { globalButton: true };
+// Popup settings — element IDs match storage keys.
+// Defaults must stay in sync with content.js / seats-content.js.
 
-const CPP_KEY = 'minCpp';
-const CPP_DEFAULT = 0;
+const TOGGLE_DEFAULTS = { globalButton: true, minCppHideRow: false };
+const NUMBER_DEFAULTS = { minCpp: 0, flexibleDaysNum: 0, goodCpp: 2 };
+const SELECT_DEFAULTS = { currency: 'USD' };
 
-function loadSettings() {
-  chrome.storage.sync.get({ ...TOGGLE_DEFAULTS, [CPP_KEY]: CPP_DEFAULT }, (settings) => {
-    for (const key of TOGGLE_KEYS) {
-      const el = document.getElementById(key);
-      if (el) el.checked = settings[key];
-    }
-    const cppEl = document.getElementById(CPP_KEY);
-    if (cppEl) cppEl.value = String(settings[CPP_KEY]);
-  });
-}
+const ALL_DEFAULTS = { ...TOGGLE_DEFAULTS, ...NUMBER_DEFAULTS, ...SELECT_DEFAULTS };
 
-loadSettings();
+chrome.storage.sync.get(ALL_DEFAULTS, (settings) => {
+  for (const key of Object.keys(TOGGLE_DEFAULTS)) {
+    const el = document.getElementById(key);
+    if (el) el.checked = settings[key];
+  }
+  for (const key of Object.keys(NUMBER_DEFAULTS)) {
+    const el = document.getElementById(key);
+    if (el) el.value = String(settings[key]);
+  }
+  for (const key of Object.keys(SELECT_DEFAULTS)) {
+    const el = document.getElementById(key);
+    if (el) el.value = settings[key];
+  }
+});
 
-// Save on change for toggles
-for (const key of TOGGLE_KEYS) {
+for (const key of Object.keys(TOGGLE_DEFAULTS)) {
   const el = document.getElementById(key);
   if (el) {
     el.addEventListener('change', () => {
@@ -27,10 +31,24 @@ for (const key of TOGGLE_KEYS) {
   }
 }
 
-// Save on change for min CPP filter
-const cppEl = document.getElementById(CPP_KEY);
-if (cppEl) {
-  cppEl.addEventListener('change', () => {
-    chrome.storage.sync.set({ [CPP_KEY]: parseFloat(cppEl.value) || 0 });
-  });
+for (const key of Object.keys(NUMBER_DEFAULTS)) {
+  const el = document.getElementById(key);
+  if (el) {
+    el.addEventListener('change', () => {
+      const min = parseFloat(el.min) || 0;
+      const max = parseFloat(el.max) || Infinity;
+      const value = Math.min(Math.max(parseFloat(el.value) || 0, min), max);
+      el.value = String(value);
+      chrome.storage.sync.set({ [key]: value });
+    });
+  }
+}
+
+for (const key of Object.keys(SELECT_DEFAULTS)) {
+  const el = document.getElementById(key);
+  if (el) {
+    el.addEventListener('change', () => {
+      chrome.storage.sync.set({ [key]: el.value });
+    });
+  }
 }

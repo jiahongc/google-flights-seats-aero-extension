@@ -42,6 +42,21 @@
     });
   } catch (e) { contextValid = false; }
 
+  // Keyboard shortcut (relayed by the background worker via chrome.commands)
+  try {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message?.action !== 'triggerSeatsAeroSearch') return;
+      if (!isResultsPage()) return;
+      const { legs, error } = extractGlobalParams();
+      if (error) {
+        const btn = document.getElementById(BUTTON_ID);
+        if (btn) showButtonError(btn, error);
+        return;
+      }
+      openSeatsAero(legs.map(l => l.url));
+    });
+  } catch (e) { contextValid = false; }
+
   // Apply visibility classes based on settings
   function applySettingsToPage() {
     document.body.classList.toggle('seats-aero-hide-global', !settings.globalButton);
@@ -735,10 +750,7 @@
 
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
-        // Only invalidate cache if inputs may have changed (not just new flight rows)
-        const buttonsExist = document.getElementById(BUTTON_ID);
-        if (!buttonsExist) {
-    
+        if (!document.getElementById(BUTTON_ID)) {
           injectGlobalButton();
         }
         applySettingsToPage();
@@ -769,5 +781,13 @@
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
+  }
+
+  // Expose pure helpers for unit tests (no-op in the browser extension)
+  if (typeof globalThis.__SEATS_AERO_TEST__ === 'object') {
+    Object.assign(globalThis.__SEATS_AERO_TEST__, {
+      parseDate, resolveAirportCode, classifyCabin, buildSeatsAeroUrl,
+      extractAirlinesFromUrl, extractFromPageTitle,
+    });
   }
 })();

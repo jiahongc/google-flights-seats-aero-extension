@@ -184,6 +184,53 @@
       color: #9aa0a6;
       line-height: 1.45;
     }
+
+    /* Dark mode */
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: #202124;
+        color: #e8eaed;
+      }
+      .header,
+      .footer {
+        border-color: #3c4043;
+      }
+      .header-title {
+        color: #e8eaed;
+      }
+      .section-label {
+        color: #8ab4f8;
+      }
+      .setting-row:hover {
+        background: #28292c;
+      }
+      .setting-label {
+        color: #bdc1c6;
+      }
+      .toggle-track {
+        background: #5f6368;
+      }
+      .toggle input:checked + .toggle-track {
+        background: rgba(138, 180, 248, 0.4);
+      }
+      .toggle input:checked + .toggle-track::after {
+        background: #8ab4f8;
+      }
+      .setting-select,
+      .setting-input {
+        background: #28292c;
+        color: #e8eaed;
+        border-color: #5f6368;
+      }
+      .setting-select:hover,
+      .setting-input:hover {
+        border-color: #80868b;
+      }
+      .setting-select:focus,
+      .setting-input:focus {
+        border-color: #8ab4f8;
+      }
+    }
   </style>
 </head>
 <body>
@@ -203,11 +250,41 @@
       </label>
     </div>
 
+    <div class="setting-row">
+      <label class="setting-label" for="flexibleDaysNum" title="Search seats.aero with ± this many days around your date">Flexible dates (± days)</label>
+      <input type="number" id="flexibleDaysNum" class="setting-input" min="0" max="7" step="1" value="0" placeholder="0">
+    </div>
+
     <div class="section-label">seats.aero — Individual Flights</div>
 
     <div class="setting-row">
       <label class="setting-label" for="minCpp">Min CPP to show</label>
       <input type="number" id="minCpp" class="setting-input" min="0" max="20" step="0.1" value="0" placeholder="0">
+    </div>
+
+    <div class="setting-row">
+      <label class="setting-label" for="minCppHideRow" title="Hide the entire result row when every cabin is below the min CPP">Hide whole row below min</label>
+      <label class="toggle">
+        <input type="checkbox" id="minCppHideRow">
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+
+    <div class="setting-row">
+      <label class="setting-label" for="goodCpp" title="Green highlight threshold. Program-specific valuations override this when the program is recognized.">Good CPP highlight ≥</label>
+      <input type="number" id="goodCpp" class="setting-input" min="0" max="20" step="0.1" value="2" placeholder="2">
+    </div>
+
+    <div class="setting-row">
+      <label class="setting-label" for="currency" title="Currency for fetched Google Flights prices and CPP">Price currency</label>
+      <select id="currency" class="setting-select">
+        <option value="USD">USD $</option>
+        <option value="EUR">EUR €</option>
+        <option value="GBP">GBP £</option>
+        <option value="CAD">CAD C$</option>
+        <option value="AUD">AUD A$</option>
+        <option value="JPY">JPY ¥</option>
+      </select>
     </div>
   </div>
 

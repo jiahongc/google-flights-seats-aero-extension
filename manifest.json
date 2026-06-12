@@ -1,9 +1,17 @@
 {
   "manifest_version": 3,
   "name": "Seats.aero for Google Flights",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "description": "Search award flight availability on seats.aero directly from Google Flights",
   "permissions": ["activeTab", "storage"],
+  "commands": {
+    "search-seats-aero": {
+      "suggested_key": {
+        "default": "Alt+S"
+      },
+      "description": "Search the current route on seats.aero"
+    }
+  },
   "host_permissions": [
     "*://www.google.com/travel/flights/*",
     "*://seats.aero/*",

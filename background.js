@@ -17,7 +17,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'fetchGoogleFlightsPrice') {
-    handlePriceFetch(message.url, message.cacheKey).then(sendResponse);
+    handlePriceFetch(message.url, message.cacheKey, message.currency).then(sendResponse);
     return true;
   }
 
@@ -25,6 +25,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     getExchangeRates().then(sendResponse);
     return true;
   }
+});
+
+// Keyboard shortcut → trigger the search button flow in the active tab
+chrome.commands?.onCommand.addListener((command) => {
+  if (command !== 'search-seats-aero') return;
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs[0];
+    if (!tab?.id || !tab.url?.includes('google.com/travel')) return;
+    chrome.tabs.sendMessage(tab.id, { action: 'triggerSeatsAeroSearch' }, () => {
+      // Ignore "no receiving end" when content script isn't loaded
+      void chrome.runtime.lastError;
+    });
+  });
 });
 
 // ─── Google Flights Price Fetching ──────────────────────────────
@@ -59,7 +72,7 @@ function setCache(key, value) {
   priceCache.set(key, { value, ts: Date.now() });
 }
 
-async function handlePriceFetch(url, cacheKey) {
+async function handlePriceFetch(url, cacheKey, currency) {
   try {
     // Check cache
     const cached = cacheKey ? getCached(cacheKey) : undefined;
@@ -72,7 +85,7 @@ async function handlePriceFetch(url, cacheKey) {
       return inflightRequests.get(cacheKey);
     }
 
-    const promise = doFetch(url, cacheKey);
+    const promise = doFetch(url, cacheKey, currency);
     if (cacheKey) inflightRequests.set(cacheKey, promise);
 
     const result = await promise;
@@ -84,9 +97,21 @@ async function handlePriceFetch(url, cacheKey) {
   }
 }
 
-async function doFetch(url, cacheKey) {
+// Sanity cap for parsed prices: 50,000 USD, scaled to the request currency
+// (e.g., ~7.5M JPY) so high-denomination currencies aren't filtered out.
+async function maxPriceForCurrency(currency) {
+  const CAP_USD = 50000;
+  if (!currency || currency === 'USD') return CAP_USD;
+  const rates = await getExchangeRates();
+  const usdPerUnit = rates[currency];
+  if (!usdPerUnit || usdPerUnit <= 0) return CAP_USD;
+  return Math.round(CAP_USD / usdPerUnit);
+}
+
+async function doFetch(url, cacheKey, currency) {
   const MAX_RETRIES = 1;
   const RETRY_DELAY = 2000;
+  const maxPrice = await maxPriceForCurrency(currency);
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -106,7 +131,7 @@ async function doFetch(url, cacheKey) {
       }
 
       const html = await response.text();
-      const priceData = extractPrices(html);
+      const priceData = extractPrices(html, maxPrice);
       const result = {
         flightPrices: priceData?.flightPrices || {},
         price: priceData?.price || null,
@@ -128,7 +153,7 @@ async function doFetch(url, cacheKey) {
   }
 }
 
-function extractPrices(html) {
+function extractPrices(html, maxPrice = 50000) {
   // Google Flights embeds price data in <script> tags with class "ds:N".
   // Primary: class="ds:1". Fallback: any script tag containing the price pattern.
   let content = null;
@@ -166,7 +191,7 @@ function extractPrices(html) {
     const priceMatch = afterFlight.match(/\[\[null,(\d+)\],"Cj/);
     if (priceMatch) {
       const p = parseInt(priceMatch[1]);
-      if (p > 0 && p < 50000) flightPrices[flightCode] = p;
+      if (p > 0 && p < maxPrice) flightPrices[flightCode] = p;
     }
   }
 
@@ -177,7 +202,7 @@ function extractPrices(html) {
   const priceRe = /\[\[?null,(\d+)\],"Cj/g;
   while ((m = priceRe.exec(content)) !== null) {
     const p = parseInt(m[1]);
-    if (p > 0 && p < 50000) {
+    if (p > 0 && p < maxPrice) {
       if (bestPrice === null) bestPrice = p;
     }
   }
@@ -212,8 +237,10 @@ async function getExchangeRates() {
 
 async function fetchRates() {
   try {
+    // No symbols filter — fetch all ~30 currencies frankfurter supports (ECB data)
+    // so fees quoted in KRW, INR, SGD, etc. convert correctly.
     const resp = await fetch(
-      'https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR,GBP,CAD,AUD,JPY',
+      'https://api.frankfurter.dev/v1/latest?base=USD',
       { signal: AbortSignal.timeout(5000) }
     );
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);

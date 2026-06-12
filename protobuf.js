@@ -45,9 +45,11 @@ function encodeNestedMessage(fieldNumber, messageBytes) {
  * @param {number} seat - 1=economy, 2=premium_economy, 3=business, 4=first
  * @param {string[]} [airlines] - IATA airline codes (e.g., ["AA"])
  * @param {boolean} [nonstop] - If true, filter to nonstop flights only
+ * @param {number} [passengers] - Number of adult passengers (default 1)
+ * @param {string} [currency] - ISO currency code for displayed prices (default USD)
  * @returns {string} Google Flights search URL
  */
-function buildGoogleFlightsTfsUrl(origin, destination, date, seat, airlines, nonstop) {
+function buildGoogleFlightsTfsUrl(origin, destination, date, seat, airlines, nonstop, passengers, currency) {
   // Airport messages: { string airport = 2; }
   const fromAirport = encodeString(2, origin);
   const toAirport = encodeString(2, destination);
@@ -61,14 +63,22 @@ function buildGoogleFlightsTfsUrl(origin, destination, date, seat, airlines, non
     ...encodeNestedMessage(14, toAirport),
   ];
 
+  // Passengers: repeated enum field 8, one entry per adult (1 = adult)
+  const adultCount = Math.min(Math.max(passengers || 1, 1), 9);
+  const passengerFields = [];
+  for (let i = 0; i < adultCount; i++) {
+    passengerFields.push(...encodeVarintField(8, 1));
+  }
+
   // Info: { data=3, passengers=8, seat=9, trip=19 }
   const info = [
     ...encodeNestedMessage(3, flightData),
-    ...encodeVarintField(8, 1),      // 1 adult
+    ...passengerFields,
     ...encodeVarintField(9, seat),   // cabin class
     ...encodeVarintField(19, 2),     // one-way
   ];
 
   const tfs = btoa(String.fromCharCode(...new Uint8Array(info)));
-  return `https://www.google.com/travel/flights/search?tfs=${encodeURIComponent(tfs)}&hl=en&curr=USD`;
+  const curr = /^[A-Z]{3}$/.test(currency || '') ? currency : 'USD';
+  return `https://www.google.com/travel/flights/search?tfs=${encodeURIComponent(tfs)}&hl=en&curr=${curr}`;
 }
