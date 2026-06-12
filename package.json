@@ -1,0 +1,11 @@
+{
+  "name": "google-flight-seats-aero-integration",
+  "version": "1.8.0",
+  "private": true,
+  "description": "Chrome extension bridging Google Flights and seats.aero for award travel",
+  "scripts": {
+    "test": "node --test",
+    "package": "bash scripts/package.sh"
+  },
+  "license": "MIT"
+}

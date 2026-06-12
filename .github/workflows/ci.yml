@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run tests
+        run: node --test
+
+      - name: Validate manifests
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('manifest.json'))"
+          node -e "JSON.parse(require('fs').readFileSync('manifest.firefox.json'))"
+          node -e "
+            const a = require('./manifest.json').version;
+            const b = require('./manifest.firefox.json').version;
+            if (a !== b) { console.error('manifest versions differ:', a, b); process.exit(1); }
+          "
+
+      - name: Package extension
+        run: bash scripts/package.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension-zips
+          path: dist/*.zip
