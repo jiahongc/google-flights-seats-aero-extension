@@ -3,3 +3,7 @@
 .DS_Store
 docs/
 seats-aero-search-page.png
+.gstack/
+demo.mp4
+dist/
+node_modules/
