@@ -1,6 +1,6 @@
 # Seats.aero for Google Flights
 
-[![Available in the Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-1a73e8?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/ijihjdddhambpocokllomjmmgfobollp)
+[![Available in the Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-1a73e8?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/seatsaero-for-google-flig/ambcknffmlijhfdlchngfhakmldelgoe)
 
 A Chrome extension that bridges [Google Flights](https://www.google.com/travel/flights) and [seats.aero](https://seats.aero) for award travel.
 
@@ -36,7 +36,7 @@ https://github.com/user-attachments/assets/d69b9272-b720-48ab-a747-9acca5a5d7e3
 ### Google Flights → seats.aero
 - **Search button** — appears in the Google Flights filter bar, opens seats.aero with your route pre-filled
 - **Smart filter mapping** — automatically transfers origin, destination, date, cabin class, passenger count, nonstop filter, and airline selection
-- **Round-trip support** — opens two tabs (outbound + return) for round-trip searches
+- **Round-trip & multi-city** — round-trip opens both legs (outbound + return); multi-city routes get a per-leg selector to open any single leg or all at once
 - **Flexible dates** — optionally search seats.aero with ± N days around your date (popup setting)
 - **Keyboard shortcut** — press `Alt+S` on a results page to search without clicking (customizable at `chrome://extensions/shortcuts`)
 
@@ -75,7 +75,7 @@ Filters without a seats.aero equivalent (bags, price, times, emissions, duration
 
 ### Chrome (recommended)
 
-**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/ijihjdddhambpocokllomjmmgfobollp)** — one click, auto-updates.
+**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/seatsaero-for-google-flig/ambcknffmlijhfdlchngfhakmldelgoe)** — one click, auto-updates.
 
 ### Chrome (from source, for development)
 
