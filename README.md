@@ -1,5 +1,7 @@
 # Seats.aero for Google Flights
 
+[![Available in the Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-1a73e8?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/ijihjdddhambpocokllomjmmgfobollp)
+
 A Chrome extension that bridges [Google Flights](https://www.google.com/travel/flights) and [seats.aero](https://seats.aero) for award travel.
 
 Search award availability from Google Flights with one click, and see Google Flights cash prices with cents-per-point (CPP) calculations on seats.aero results.
@@ -71,7 +73,11 @@ Filters without a seats.aero equivalent (bags, price, times, emissions, duration
 
 ## Install
 
-### Chrome
+### Chrome (recommended)
+
+**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/ijihjdddhambpocokllomjmmgfobollp)** — one click, auto-updates.
+
+### Chrome (from source, for development)
 
 1. Clone or download this repo
 2. Open Chrome → `chrome://extensions/`
