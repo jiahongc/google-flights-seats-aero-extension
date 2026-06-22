@@ -68,6 +68,26 @@ test('parsePointsCost extracts points from cell text', () => {
   assert.equal(parsePointsCost('Not Available'), 0);
 });
 
+test('parsePointsCost parses compact k/M notation (newer views)', () => {
+  const { parsePointsCost } = helpers();
+  assert.equal(parsePointsCost('Direct30k'), 30000);
+  assert.equal(parsePointsCost('Direct51.7k'), 51700);
+  assert.equal(parsePointsCost('222k'), 222000);
+  assert.equal(parsePointsCost('272.5k'), 272500);
+  assert.equal(parsePointsCost('1.2M'), 1200000);
+});
+
+// ─── extractAirportCode ────────────────────────────────────────────
+
+test('extractAirportCode pulls trailing IATA from city+code text', () => {
+  const { extractAirportCode } = helpers();
+  assert.equal(extractAirportCode('NewarkEWR', 'X'), 'EWR');
+  assert.equal(extractAirportCode('LimaLIM', 'X'), 'LIM');
+  assert.equal(extractAirportCode('EWR', 'X'), 'EWR');
+  assert.equal(extractAirportCode('New York JFK', 'X'), 'JFK');
+  assert.equal(extractAirportCode(null, 'FALLBACK'), 'FALLBACK');
+});
+
 // ─── parseFees / feeAmountUSD ──────────────────────────────────────
 // Default (offline) rates: EUR 1.08, GBP 1.27, CAD 0.74, AUD 0.66, JPY 0.0067
 

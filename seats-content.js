@@ -59,6 +59,15 @@
    */
   function isCellDirect(cell, globalDirect) {
     if (globalDirect) return true;
+    // Newer seats.aero views label stops as text ("Direct", "1 stop", "2 stops").
+    // Read it before any badge-color heuristic — text is more reliable than color.
+    // Safe to read textContent here: this runs before our link is appended, and
+    // already-linked cells are skipped earlier, so no injected text contaminates it.
+    const text = cell.textContent.toLowerCase();
+    if (/\bnonstop\b|\bdirect\b/.test(text)) return true;
+    if (/\bstops?\b/.test(text)) return false;
+    // Legacy fallback for older views without text stop-labels. Brittle (depends
+    // on seats.aero's badge palette) — TODO: remove once all views emit text.
     // Look for the badge element (typically a span with background-color)
     const badges = cell.querySelectorAll('span, .badge, [class*="badge"]');
     for (const badge of badges) {
@@ -138,19 +147,33 @@
       if (text === 'date') indices.date = i;
       if (text === 'from') indices.from = i;
       if (text === 'to') indices.to = i;
+      // Newer views use explicit "Origin"/"Dest" columns alongside time-only
+      // "Departs"/"Arrives" columns; prefer them over the time-column fallback.
+      if (text === 'origin') indices.origin = i;
+      if (text === 'dest' || text === 'destination') indices.destination = i;
       if (text === 'departs') indices.departs = i;
       if (text === 'arrives') indices.arrives = i;
       if (text === 'program' || text === 'source') indices.program = i;
-      if (text === 'flights') indices.flights = i;
+      if (text === 'flights' || text === 'flight') indices.flights = i;
       if (text === 'economy') indices.economy = i;
       if (text === 'premium') indices.premium = i;
       if (text === 'business') indices.business = i;
       if (text === 'first') indices.first = i;
     });
-    // Origin/destination: prefer "From"/"To" columns, fall back to "Departs"/"Arrives"
-    indices.origin = indices.from ?? indices.departs;
-    indices.destination = indices.to ?? indices.arrives;
+    // Origin/destination: prefer explicit "Origin"/"Dest", then "From"/"To",
+    // and only fall back to the time-only "Departs"/"Arrives" columns last.
+    indices.origin = indices.origin ?? indices.from ?? indices.departs;
+    indices.destination = indices.destination ?? indices.to ?? indices.arrives;
     return indices;
+  }
+
+  // Newer views render the airport as "<City><CODE>" with no separator in
+  // textContent (e.g. "NewarkEWR"). Google Flights needs the IATA code, so pull
+  // the trailing 3-letter uppercase code. Plain "EWR" cells pass through unchanged.
+  function extractAirportCode(text, fallback) {
+    if (!text) return fallback;
+    const match = text.match(/([A-Z]{3})\s*$/);
+    return match ? match[1] : text;
   }
 
   function extractCellText(row, index) {
@@ -283,7 +306,14 @@
   }
 
   function parsePointsCost(cellText) {
-    // Extract number from "64,700 pts" or "279,000 pts"
+    // Newer views use compact notation: "30k", "51.7k", "222k", "1.2M".
+    const compact = cellText.match(/(\d[\d,]*(?:\.\d+)?)\s*([kKmM])\b/);
+    if (compact) {
+      const num = parseFloat(compact[1].replace(/,/g, ''));
+      const mult = /[kK]/.test(compact[2]) ? 1e3 : 1e6;
+      return Math.round(num * mult);
+    }
+    // Older views: "64,700 pts" or "279,000 pts"
     const match = cellText.match(/([\d,]+)\s*pts/i);
     if (!match) return 0;
     return parseInt(match[1].replace(/,/g, ''));
@@ -474,17 +504,19 @@
       let origin, destination, date, airlineCode, flightNumber, allFlightNumbers = [], isConnection = false;
       const program = extractCellText(row, cols.program);
 
+      origin = extractAirportCode(extractCellText(row, cols.origin), urlParams.origin);
+      destination = extractAirportCode(extractCellText(row, cols.destination), urlParams.destination);
+
       if (viewType === 'individual') {
-        origin = extractCellText(row, cols.origin) || urlParams.origin;
-        destination = extractCellText(row, cols.destination) || urlParams.destination;
-        const departsText = extractCellText(row, cols.departs);
-        date = parseDepartureDate(departsText, urlDate);
+        // Prefer the ISO "Date" column; older views only had a "MM/DD" in Departs.
+        const dateCell = extractCellText(row, cols.date);
+        date = /^\d{4}-\d{2}-\d{2}/.test(dateCell || '')
+          ? dateCell.slice(0, 10)
+          : parseDepartureDate(extractCellText(row, cols.departs), urlDate);
         const flightsText = extractCellText(row, cols.flights);
         ({ airlineCode, flightNumber, allFlightNumbers, isConnection } = parseFlightInfo(flightsText));
       } else {
         date = extractCellText(row, cols.date) || '';
-        origin = extractCellText(row, cols.origin) || urlParams.origin;
-        destination = extractCellText(row, cols.destination) || urlParams.destination;
         airlineCode = null;
       }
 
@@ -609,7 +641,7 @@
   if (typeof globalThis.__SEATS_AERO_TEST__ === 'object') {
     Object.assign(globalThis.__SEATS_AERO_TEST__, {
       parseDepartureDate, parseFlightInfo, parsePointsCost, parseFees,
-      feeAmountUSD, formatFeeAmount, programBaseline, settings,
+      feeAmountUSD, formatFeeAmount, programBaseline, extractAirportCode, settings,
     });
   }
 })();
