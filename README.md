@@ -42,7 +42,7 @@ https://github.com/user-attachments/assets/d69b9272-b720-48ab-a747-9acca5a5d7e3
 
 ### seats.aero → Google Flights
 
-Works on both seats.aero views with different levels of detail:
+seats.aero offers several result layouts (Individual Flights, plus program-grouped views). The extension adapts to them with different levels of detail:
 
 **Individual Flights** — shows the exact cash price and CPP for each specific flight
 - Matches the flight number to its specific Google Flights cash price (e.g., "$352 · 1.41cpp")
